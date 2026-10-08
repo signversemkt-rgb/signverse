@@ -38,6 +38,7 @@
           <li><a href="#services" class="nav__link">บริการ</a></li>
           <li><a href="#portfolio" class="nav__link">ผลงาน</a></li>
           <li><a href="#process" class="nav__link">ขั้นตอน</a></li>
+          <li><a href="#ai-brief" class="nav__link">บรีฟด้วย AI</a></li>
           <li><a href="#reviews" class="nav__link">รีวิว</a></li>
           <li><a href="#faq" class="nav__link">คำถามที่พบบ่อย</a></li>
         </ul>
@@ -275,6 +276,108 @@
       </div>
     </section>
 
+    <!-- ========== AI บรีฟงานป้าย ========== -->
+    <section class="section" id="ai-brief">
+      <div class="container">
+        <div class="section__head reveal">
+          <span class="eyebrow">บรีฟงานด้วย AI</span>
+          <h2 class="section__title">เล่าไอเดียป้ายของคุณ ให้ AI ช่วยสรุปบรีฟ</h2>
+          <p class="section__lead">กรอกเท่าที่รู้ก็พอ AI จะสรุปบรีฟ แนะนำแนวทางการออกแบบ และบอกข้อมูลที่ควรเตรียมเพิ่ม จากนั้นส่งบรีฟให้ทีมงานทาง LINE ได้ทันที</p>
+        </div>
+
+        <div class="brief reveal">
+          <form class="brief__form" id="briefForm" novalidate>
+            <div class="brief__grid">
+              <div class="field">
+                <label for="bf-shopName">ชื่อร้าน / แบรนด์</label>
+                <input id="bf-shopName" name="shopName" type="text" maxlength="120" placeholder="เช่น ร้านกาแฟบ้านสวน">
+              </div>
+              <div class="field">
+                <label for="bf-size">ขนาดป้าย</label>
+                <input id="bf-size" name="size" type="text" maxlength="120" placeholder="เช่น 3 x 1 เมตร">
+              </div>
+              <div class="field field--full">
+                <label for="bf-signText">ข้อความบนป้าย</label>
+                <textarea id="bf-signText" name="signText" rows="2" maxlength="300" placeholder="เช่น BAAN SUAN CAFÉ · เปิดทุกวัน 07:00–18:00"></textarea>
+              </div>
+              <div class="field">
+                <label for="bf-colors">โทนสี</label>
+                <input id="bf-colors" name="colors" type="text" maxlength="120" placeholder="เช่น เขียวเข้ม + ไม้ธรรมชาติ">
+              </div>
+              <div class="field">
+                <label for="bf-style">สไตล์</label>
+                <select id="bf-style" name="style">
+                  <option value="">ยังไม่แน่ใจ ให้ AI แนะนำ</option>
+                  <option>มินิมอล</option>
+                  <option>โมเดิร์น</option>
+                  <option>หรูหรา / พรีเมียม</option>
+                  <option>วินเทจ / ลอฟต์</option>
+                  <option>น่ารัก / สดใส</option>
+                  <option>ญี่ปุ่น</option>
+                  <option>ธรรมชาติ / ไม้</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="bf-material">วัสดุ</label>
+                <select id="bf-material" name="material">
+                  <option value="">ยังไม่แน่ใจ ให้ช่วยแนะนำ</option>
+                  <option>อะคริลิก</option>
+                  <option>สแตนเลส / โลหะ</option>
+                  <option>ไม้</option>
+                  <option>ไวนิล</option>
+                  <option>ซิงค์ / อลูมิเนียมคอมโพสิต</option>
+                  <option>ฟิวเจอร์บอร์ด / พลาสวูด</option>
+                </select>
+              </div>
+              <fieldset class="field">
+                <legend>ติดไฟหรือไม่</legend>
+                <div class="chips">
+                  <label class="chip"><input type="radio" name="lighting" value="ติดไฟ"><span>ติดไฟ</span></label>
+                  <label class="chip"><input type="radio" name="lighting" value="ไม่ติดไฟ"><span>ไม่ติดไฟ</span></label>
+                  <label class="chip"><input type="radio" name="lighting" value="ยังไม่แน่ใจ" checked><span>ยังไม่แน่ใจ</span></label>
+                </div>
+              </fieldset>
+              <div class="field">
+                <label for="bf-budget">งบประมาณ</label>
+                <input id="bf-budget" name="budget" type="text" maxlength="80" placeholder="เช่น 15,000 บาท">
+              </div>
+              <div class="field">
+                <label for="bf-deadline">วันที่ต้องการ</label>
+                <input id="bf-deadline" name="deadline" type="date">
+              </div>
+              <div class="field field--full">
+                <label for="bf-details">รายละเอียดเพิ่มเติม</label>
+                <textarea id="bf-details" name="details" rows="3" maxlength="1500" placeholder="เช่น ติดหน้าร้านชั้น 1 ผนังปูน อยากให้มองเห็นชัดจากถนนตอนกลางคืน"></textarea>
+              </div>
+            </div>
+            <p class="brief__error" id="briefError" role="alert" hidden></p>
+            <button type="submit" class="btn btn--primary btn--lg brief__submit" id="briefSubmit">
+              <svg class="icon"><use href="#i-check"/></svg> <span>ให้ AI สรุปบรีฟ</span>
+            </button>
+          </form>
+
+          <div class="brief__result" id="briefResult" aria-live="polite">
+            <div class="brief__empty" id="briefEmpty">
+              <span class="brief__empty-icon" aria-hidden="true">AI</span>
+              <p>ผลสรุปบรีฟจะแสดงที่นี่<br>กรอกข้อมูลทางซ้าย แล้วกด "ให้ AI สรุปบรีฟ"</p>
+            </div>
+            <div class="brief__output" id="briefOutput" hidden>
+              <h3>สรุปบรีฟงาน</h3>
+              <p id="briefSummary"></p>
+              <h3>แนวทางการออกแบบ</h3>
+              <ul class="brief__list" id="briefDesign"></ul>
+              <h3>ข้อมูลที่ยังขาด</h3>
+              <ul class="brief__list brief__list--missing" id="briefMissing"></ul>
+              <a href="#" class="btn btn--line btn--lg brief__send js-line-link" id="briefSend" target="_blank" rel="noopener">
+                <svg class="icon"><use href="#i-line"/></svg> คัดลอกบรีฟและส่งทาง LINE
+              </a>
+              <p class="brief__note" id="briefNote">ผลจาก AI เป็นแนวทางเบื้องต้น ทีมงานจะยืนยันรายละเอียดและราคาให้อีกครั้ง</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ========== 7. ผลงาน + รีวิว ========== -->
     <section class="section" id="portfolio">
       <div class="container">
@@ -498,5 +601,6 @@
   </div>
 
   <script src="js/main.js"></script>
+  <script src="js/ai-brief.js"></script>
 </body>
 </html>

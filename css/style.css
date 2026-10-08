@@ -637,3 +637,136 @@ button { font: inherit; cursor: pointer; }
   .float-line { display: grid; }
   .mobile-bar { display: none; }
 }
+
+/* =========================================================
+   AI บรีฟงานป้าย (#ai-brief)
+   ========================================================= */
+.btn--primary { background: var(--blue-600); color: var(--white); box-shadow: 0 8px 20px rgba(30, 111, 255, .3); }
+.btn--primary:hover { background: var(--blue-700); }
+.btn:disabled { opacity: .65; cursor: progress; transform: none; }
+
+.brief { display: grid; gap: 24px; }
+.brief [hidden] { display: none !important; }
+.brief__form,
+.brief__result {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+  box-shadow: var(--shadow);
+}
+.brief__grid { display: grid; gap: 18px; margin-bottom: 20px; }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.field label,
+.field legend {
+  font-family: var(--font-head);
+  font-weight: 500;
+  font-size: .95rem;
+  padding: 0;
+  margin-bottom: 6px;
+}
+.field input,
+.field select,
+.field textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  transition: border-color .2s, box-shadow .2s;
+}
+.field textarea { resize: vertical; line-height: 1.6; }
+.field input::placeholder,
+.field textarea::placeholder { color: var(--ink-soft); opacity: .7; }
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: none;
+  border-color: var(--blue-600);
+  box-shadow: 0 0 0 4px var(--blue-100);
+}
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { position: relative; cursor: pointer; }
+.chip input { position: absolute; opacity: 0; pointer-events: none; }
+.chip span {
+  display: inline-flex; align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  font-size: .95rem;
+  transition: all .2s;
+}
+.chip:hover span { border-color: var(--blue-400); }
+.chip input:checked + span { background: var(--blue-600); border-color: var(--blue-600); color: var(--white); }
+.chip input:focus-visible + span { outline: 3px solid var(--blue-400); outline-offset: 2px; }
+
+.brief__error {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--red-50);
+  color: var(--red-500);
+  font-size: .95rem;
+}
+.brief__submit { width: 100%; }
+
+.brief__result { display: flex; flex-direction: column; }
+.brief__empty {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px;
+  min-height: 240px;
+  padding: 24px;
+  border: 2px dashed var(--blue-100);
+  border-radius: var(--radius-sm);
+  background: var(--blue-50);
+  color: var(--ink-soft);
+  text-align: center;
+}
+.brief__empty p { margin: 0; }
+.brief__empty-icon {
+  display: grid; place-items: center;
+  width: 56px; height: 56px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, var(--blue-600), var(--cyan-400));
+  color: var(--white);
+  font-family: var(--font-head);
+  font-weight: 700;
+}
+.brief__output h3 {
+  font-size: 1.05rem;
+  color: var(--blue-900);
+  margin: 20px 0 8px;
+}
+.brief__output h3:first-child { margin-top: 0; }
+.brief__output p { color: var(--ink); }
+.brief__list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 4px; }
+.brief__list li { position: relative; padding-left: 26px; color: var(--ink); }
+.brief__list li::before {
+  content: "";
+  position: absolute; left: 4px; top: .6em;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--blue-600);
+}
+.brief__list--missing li::before { background: var(--amber-400); }
+.brief__send { width: 100%; margin-top: 24px; }
+.brief__note { margin: 12px 0 0; font-size: .88rem; color: var(--ink-soft); text-align: center; }
+
+@media (min-width: 640px) {
+  .brief__form, .brief__result { padding: 32px; }
+  .brief__grid { grid-template-columns: repeat(2, 1fr); }
+  .field--full { grid-column: 1 / -1; }
+}
+
+@media (min-width: 960px) {
+  .brief { grid-template-columns: 1.25fr 1fr; align-items: start; gap: 28px; }
+  .brief__result { position: sticky; top: calc(var(--header-h) + 20px); min-height: 420px; }
+}
