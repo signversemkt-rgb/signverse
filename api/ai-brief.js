@@ -71,16 +71,39 @@ function briefToText(brief) {
     .join("\n");
 }
 
+// อ่าน key แบบตัดช่องว่าง/ขึ้นบรรทัดที่อาจติดมาตอนวางค่าใน Vercel
+function getApiKey() {
+  return (process.env.OPENAI_API_KEY || "").trim();
+}
+
+// แปลง error จาก OpenAI เป็นรหัสที่ปลอดภัย (ไม่ส่ง/ไม่ log ข้อความดิบ เพราะอาจมีบางส่วนของ key)
+function mapOpenAIError(status, errCode) {
+  if (status === 401 || status === 403) return { code: "openai_auth", status: 502 };
+  if (status === 404 || errCode === "model_not_found") return { code: "openai_model", status: 502 };
+  if (status === 429) return { code: errCode === "insufficient_quota" ? "openai_quota" : "openai_rate_limit", status: 503 };
+  if (status === 400) return { code: "openai_bad_request", status: 502 };
+  return { code: "openai_error", status: 502 };
+}
+
 module.exports = async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ error: "รองรับเฉพาะ POST เท่านั้น" });
+  // GET = ตรวจสถานะแบบปลอดภัย (บอกแค่ว่าตั้ง key แล้วหรือยัง ไม่เปิดเผยค่า)
+  if (req.method === "GET") {
+    return res.status(200).json({
+      ok: true,
+      configured: Boolean(getApiKey()),
+      model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
+    });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ error: "รองรับเฉพาะ POST เท่านั้น", code: "method_not_allowed" });
+  }
+
+  const apiKey = getApiKey();
   if (!apiKey) {
-    console.error("OPENAI_API_KEY is not set");
-    return res.status(500).json({ error: "ระบบ AI ยังไม่พร้อมใช้งาน กรุณาติดต่อทาง LINE" });
+    console.error("[ai-brief] OPENAI_API_KEY is missing in this deployment environment");
+    return res.status(500).json({ error: "ระบบ AI ยังไม่พร้อมใช้งาน กรุณาติดต่อทาง LINE", code: "missing_api_key" });
   }
 
   let body = req.body;
@@ -88,14 +111,15 @@ module.exports = async function handler(req, res) {
     try { body = JSON.parse(body); } catch { body = null; }
   }
   if (!body || typeof body !== "object") {
-    return res.status(400).json({ error: "รูปแบบข้อมูลไม่ถูกต้อง" });
+    return res.status(400).json({ error: "รูปแบบข้อมูลไม่ถูกต้อง", code: "invalid_body" });
   }
 
   const brief = sanitize(body);
   if (!brief.shopName && !brief.signText) {
-    return res.status(400).json({ error: "กรุณากรอกชื่อร้าน หรือข้อความบนป้าย อย่างน้อย 1 ช่อง" });
+    return res.status(400).json({ error: "กรุณากรอกชื่อร้าน หรือข้อความบนป้าย อย่างน้อย 1 ช่อง", code: "missing_fields" });
   }
 
+  const model = process.env.OPENAI_MODEL || DEFAULT_MODEL;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -106,10 +130,10 @@ module.exports = async function handler(req, res) {
         "Content-Type": "application/json",
         Authorization: `Bearer ${apiKey}`,
       },
+      // ไม่ส่ง temperature เพราะโมเดลแบบ reasoning รุ่นใหม่ไม่รองรับ ทำให้เปลี่ยน OPENAI_MODEL ได้อย่างปลอดภัย
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL || DEFAULT_MODEL,
-        temperature: 0.5,
-        max_completion_tokens: 1200,
+        model,
+        max_completion_tokens: 2500,
         response_format: { type: "json_schema", json_schema: RESPONSE_SCHEMA },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -120,14 +144,27 @@ module.exports = async function handler(req, res) {
     });
 
     if (!response.ok) {
-      console.error("OpenAI error", response.status, await response.text());
-      return res.status(502).json({ error: "AI ไม่สามารถวิเคราะห์ได้ในขณะนี้ กรุณาลองใหม่อีกครั้ง" });
+      const errBody = await response.json().catch(() => ({}));
+      const errCode = errBody?.error?.code || errBody?.error?.type || "unknown";
+      const mapped = mapOpenAIError(response.status, errCode);
+      console.error(`[ai-brief] OpenAI request failed: status=${response.status} code=${errCode} model=${model}`);
+      return res.status(mapped.status).json({
+        error: mapped.code === "openai_rate_limit"
+          ? "มีผู้ใช้งานจำนวนมาก กรุณาลองใหม่ในอีกสักครู่"
+          : "AI ไม่สามารถวิเคราะห์ได้ในขณะนี้ กรุณาลองใหม่ หรือทักไลน์หาเราโดยตรง",
+        code: mapped.code,
+      });
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    const result = JSON.parse(content);
+    const message = data.choices?.[0]?.message;
+    if (!message?.content) {
+      const reason = message?.refusal ? "refusal" : data.choices?.[0]?.finish_reason || "empty";
+      console.error(`[ai-brief] OpenAI returned no content: reason=${reason} model=${model}`);
+      return res.status(502).json({ error: "AI ไม่สามารถสรุปบรีฟนี้ได้ กรุณาลองปรับรายละเอียดแล้วส่งใหม่", code: "openai_empty" });
+    }
 
+    const result = JSON.parse(message.content);
     return res.status(200).json({
       summary: String(result.summary || ""),
       design_direction: Array.isArray(result.design_direction) ? result.design_direction.map(String) : [],
@@ -135,11 +172,12 @@ module.exports = async function handler(req, res) {
     });
   } catch (err) {
     const timedOut = err.name === "AbortError";
-    console.error("ai-brief failed", err);
+    console.error(`[ai-brief] ${timedOut ? "timeout" : "unexpected error"}: ${err.name}`);
     return res.status(timedOut ? 504 : 500).json({
       error: timedOut
         ? "AI ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง"
         : "เกิดข้อผิดพลาด กรุณาลองใหม่ หรือทักไลน์หาเราโดยตรง",
+      code: timedOut ? "timeout" : "server_error",
     });
   } finally {
     clearTimeout(timer);

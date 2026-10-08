@@ -117,7 +117,14 @@
         body: JSON.stringify(data),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
+      if (!res.ok) {
+        // บันทึกรหัสไว้ช่วยตรวจปัญหาใน DevTools (ไม่มีข้อมูลลับ)
+        console.warn("[ai-brief]", res.status, json.code || "non_json_response");
+        let msg = json.error;
+        if (!msg && res.status === 404) msg = "ไม่พบระบบ AI บนเซิร์ฟเวอร์ กรุณาทักไลน์หาเราโดยตรง";
+        if (!msg && res.status === 504) msg = "AI ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้ง";
+        throw new Error(msg || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
+      }
 
       const result = {
         summary: json.summary || "",
@@ -137,7 +144,10 @@
         output.scrollIntoView({ behavior: "smooth", block: "start" });
       }
     } catch (err) {
-      showError(err.message || "ไม่สามารถเชื่อมต่อได้ กรุณาลองใหม่อีกครั้ง");
+      // fetch ล้มเหลวระดับเครือข่ายจะได้ TypeError ภาษาอังกฤษ เช่น "Failed to fetch"
+      showError(err instanceof TypeError || !err.message
+        ? "ไม่สามารถเชื่อมต่อได้ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง"
+        : err.message);
     } finally {
       setLoading(false);
     }
