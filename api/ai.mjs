@@ -8,7 +8,7 @@
 //   POST /api/ai {action:"liffOrders"|"liffPrepare"|"liffResult", idToken, …}  → หน้า LIFF (ยืนยันตัวตนด้วย LINE ID token)
 import { route } from "./_lib/route.mjs";
 import { sendJson, readJson, query, HttpError, assertSameOrigin, getIp, cleanText, isId } from "./_lib/http.mjs";
-import { need, requireUser, rateLimit, verifyTurnstile, canUseLineOrders } from "./_lib/context.mjs";
+import { need, requireUser, rateLimit, verifyTurnstile, canUseLineOrders, canUseAi, isCreditExempt } from "./_lib/context.mjs";
 import { createJob, runStep, jobView, quotaView } from "./_lib/jobs.mjs";
 import { LIMITS } from "./_lib/images.mjs";
 import { generateOrderNo, generateClaimCode, estimateFromForm, cleanOrderForm, orderView } from "./_lib/orders.mjs";
@@ -104,6 +104,7 @@ export default route(async (req, res, ctx) => {
 
   if (body.action === "create") {
     if (!ctx.ai || !ctx.storage) throw new HttpError(503, "ai_unavailable");
+    if (!canUseAi(ctx, user)) throw new HttpError(403, "ai_unavailable");     // Mock AI บนเว็บจริง = เฉพาะพนักงาน
     await rateLimit(ctx, `ai:user:${user.id}`, 10, 3600);
     await rateLimit(ctx, `ai:ip:${getIp(req)}`, 20, 3600);
     await verifyTurnstile(ctx, body.turnstileToken, getIp(req));
@@ -111,6 +112,7 @@ export default route(async (req, res, ctx) => {
     const { job, created } = await createJob({
       repo: ctx.repo, userId: user.id, idempotencyKey: body.idempotencyKey, input,
       dailyLimit: ctx.config.dailyLimit, defaultCredits: ctx.config.defaultCredits, uuid: ctx.uuid,
+      exempt: isCreditExempt(ctx, user),
     });
     const quota = quotaView(await ctx.repo.getQuota(user.id, ctx.config.defaultCredits));
     return sendJson(res, created ? 201 : 200, { job: jobView(job), quota, created });
@@ -118,6 +120,7 @@ export default route(async (req, res, ctx) => {
 
   if (body.action === "step") {
     if (!ctx.ai || !ctx.storage) throw new HttpError(503, "ai_unavailable");
+    if (!canUseAi(ctx, user)) throw new HttpError(403, "ai_unavailable");
     if (!isId(body.jobId)) throw new HttpError(400, "bad_request");
     await rateLimit(ctx, `ai-step:user:${user.id}`, 30, 3600);
     const job = await runStep({ repo: ctx.repo, storage: ctx.storage, provider: ctx.ai, userId: user.id, jobId: body.jobId, step: body.step });

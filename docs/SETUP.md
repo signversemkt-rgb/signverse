@@ -12,6 +12,7 @@
 3. กด **Connect** กับโปรเจกต์ (เลือกทั้ง Production และ Preview) → Vercel จะเพิ่ม `DATABASE_URL` ให้อัตโนมัติ
 4. เปิด Neon Console (ปุ่ม **Open in Neon**) → **SQL Editor**
 5. คัดลอกเนื้อหาไฟล์ `db/schema.sql` ทั้งหมด วางแล้วกด **Run** (รันซ้ำได้ ไม่ทำข้อมูลหาย)
+   - ถ้าเคยรันเวอร์ชันก่อนแล้ว ให้รันไฟล์ล่าสุดซ้ำอีกครั้ง (ส่วนท้ายไฟล์อัปเดตตารางเดิมให้อัตโนมัติ)
 
 > แนะนำตั้ง Function Region ของ Vercel เป็น Singapore ด้วย (Settings → Functions → Region → `sin1`) เพื่อให้ API อยู่ใกล้ฐานข้อมูล
 
@@ -164,7 +165,7 @@
 | `CUSTOMER_FILE_RETENTION_DAYS` | `90` | เก็บภาพลูกค้า/ภาพ AI กี่วัน |
 | `GALLERY_TRASH_DAYS` | `30` | รูปในถังขยะถูกลบถาวรหลังกี่วัน |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | (ไม่บังคับ) | Cloudflare Turnstile กันบอท — ใส่เมื่อสมัครแล้ว |
-| `AI_PROVIDER` | **เว้นว่าง** | `mock` ใช้ทดสอบบน Preview เท่านั้น · AI จริงยังไม่เปิด (รอระบบลายน้ำ) |
+| `AI_PROVIDER` | **เว้นว่าง** หรือ `mock` | `mock` = Mock AI (รูป PNG ตัวอย่าง ไม่มีค่าใช้จ่าย) **ใช้ได้เฉพาะบัญชี staff/admin** ตรวจที่ Server · ไม่ใช้เครดิตของใคร · ลูกค้าทั่วไปไม่เห็นส่วน AI · AI จริงยังไม่เปิด (รอระบบลายน้ำ) |
 
 **ห้ามตั้ง `MOCK_SERVICES` บน Production** (ระบบจะปฏิเสธเอง)
 

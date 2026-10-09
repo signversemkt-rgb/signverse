@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS ai_jobs (
   mockup_status       text NOT NULL DEFAULT 'pending' CHECK (mockup_status IN ('pending', 'processing', 'done', 'failed', 'unknown')),
   artwork_storage_key text,
   mockup_storage_key  text,
-  credit_state        text NOT NULL DEFAULT 'reserved' CHECK (credit_state IN ('reserved', 'consumed', 'refunded')),
+  credit_state        text NOT NULL DEFAULT 'reserved' CHECK (credit_state IN ('reserved', 'consumed', 'refunded', 'exempt')),
   attempts            integer NOT NULL DEFAULT 0,
   input               jsonb NOT NULL,          -- ข้อมูลฟอร์ม + reference/upload ids ที่ตรวจแล้ว
   error_code          text,
@@ -223,3 +223,9 @@ CREATE TABLE IF NOT EXISTS production_orders (
 );
 CREATE INDEX IF NOT EXISTS production_orders_created_idx ON production_orders(created_at DESC);
 CREATE INDEX IF NOT EXISTS production_orders_status_idx ON production_orders(status, created_at DESC);
+
+-- ========== อัปเดตสำหรับฐานข้อมูลที่สร้างไว้ก่อนแล้ว (รันซ้ำได้) ==========
+-- 'exempt' = งานทดสอบของพนักงานด้วย Mock AI (ไม่ใช้เครดิตใคร)
+ALTER TABLE ai_jobs DROP CONSTRAINT IF EXISTS ai_jobs_credit_state_check;
+ALTER TABLE ai_jobs ADD CONSTRAINT ai_jobs_credit_state_check CHECK (credit_state IN ('reserved', 'consumed', 'refunded', 'exempt'));
+ALTER TABLE production_orders ADD COLUMN IF NOT EXISTS line_request_id text;

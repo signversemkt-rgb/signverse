@@ -39,7 +39,7 @@ function startOfDay(now) {
 }
 
 // จองสิทธิ์และสร้างงาน (Idempotent ด้วย idempotencyKey)
-export async function createJob({ repo, userId, idempotencyKey, input, dailyLimit, defaultCredits, uuid, now = Date.now() }) {
+export async function createJob({ repo, userId, idempotencyKey, input, dailyLimit, defaultCredits, uuid, now = Date.now(), exempt = false }) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey || "")) throw new HttpError(400, "bad_request");
   return repo.tx(async (t) => {
     // ล็อกแถวโควตาของผู้ใช้ก่อน → คำขอพร้อมกันของคนเดียวกันต่อคิวกัน (กันใช้สิทธิ์เกิน/หักซ้ำ)
@@ -49,9 +49,11 @@ export async function createJob({ repo, userId, idempotencyKey, input, dailyLimi
     if (existing) return { job: existing, created: false };
 
     if (await t.countActiveJobs(userId)) throw new HttpError(409, "job_in_progress");
-    if (q.free_credits_used + q.reserved_credits >= q.free_credits_total) throw new HttpError(403, "quota_exhausted");
-    if (dailyLimit > 0 && (await t.countJobsSince(startOfDay(now))) >= dailyLimit) throw new HttpError(429, "daily_limit");
-    await t.updateQuota(userId, { reserved_credits: q.reserved_credits + 1 });
+    if (!exempt) {                                    // งานทดสอบของพนักงาน (Mock) ไม่ใช้เครดิตและไม่นับโควตารายวัน
+      if (q.free_credits_used + q.reserved_credits >= q.free_credits_total) throw new HttpError(403, "quota_exhausted");
+      if (dailyLimit > 0 && (await t.countJobsSince(startOfDay(now))) >= dailyLimit) throw new HttpError(429, "daily_limit");
+      await t.updateQuota(userId, { reserved_credits: q.reserved_credits + 1 });
+    }
 
     const job = {
       job_id: uuid(),
@@ -62,7 +64,7 @@ export async function createJob({ repo, userId, idempotencyKey, input, dailyLimi
       mockup_status: "pending",
       artwork_storage_key: null,
       mockup_storage_key: null,
-      credit_state: "reserved",
+      credit_state: exempt ? "exempt" : "reserved",
       attempts: 0,
       input,
       error_code: null,
@@ -70,7 +72,7 @@ export async function createJob({ repo, userId, idempotencyKey, input, dailyLimi
       updated_at: new Date(now).toISOString(),
     };
     await t.insertJob(job);
-    await t.audit(userId, "ai_job_created", job.job_id, {});
+    await t.audit(userId, "ai_job_created", job.job_id, { exempt });
     return { job, created: true };
   });
 }

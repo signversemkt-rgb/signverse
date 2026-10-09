@@ -92,6 +92,7 @@ Breakpoints: `640px`, `960px` (min-width)
 - ระบบส่งเข้ากลุ่ม LINE พนักงาน (เดิม) ปิดไว้ — เปิดเฉพาะ `LINE_GROUP_ORDERS_ENABLED=true`; ห้ามเรียก LINE จริงในการทดสอบ (tests บล็อก fetch)
 - โค้ดใหม่ฝั่ง server เป็น ESM `.mjs`; ไฟล์เดิม `.js` เป็น CommonJS — อย่าเพิ่ม `"type": "module"` ใน package.json
 - AI จริงยังไม่เปิด (`ctx.ai` = null) จนกว่าจะมีลายน้ำฝั่ง Server; ใช้ `api/_lib/ai-mock.mjs`
+- `AI_PROVIDER=mock` บนเว็บจริง → `canUseAi()` อนุญาตเฉพาะ staff/admin และงานเป็น `credit_state=exempt` (ไม่หักเครดิต) · ทดสอบในเครื่องด้วย `MOCK_AI_STAFF_ONLY=1`
 - `MOCK_SERVICES=1` ห้ามใช้บน Production (ระบบปฏิเสธ)
 - หน้าเว็บ: `js/account.js` (login modal), `js/ai-design.js` (gallery picker, uploads, generate, canvas ขนาด), หลังบ้าน `admin/`
 - ทดสอบ: `ELECTRON_RUN_AS_NODE=1 "/Applications/Cursor.app/Contents/MacOS/Cursor" --test tests/*.test.*` (เครื่องนี้ไม่มี Node แยก)

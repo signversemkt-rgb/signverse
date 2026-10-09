@@ -28,7 +28,7 @@ export default route(async (req, res, ctx) => {
     user: user ? { id: user.id, name: user.name, role: user.role, image: user.image || null } : null,
     quota,
     providers: ctx.authReady ? ctx.providers : [],
-    aiAvailable: Boolean(ctx.ai && ctx.repo && ctx.storage),
+    aiAvailable: (await import("./_lib/context.mjs")).canUseAi(ctx, user),
     turnstileSiteKey: ctx.config.turnstileSiteKey || null,
     liffId: ctx.config.liffId || null,
     lineOrders: (await import("./_lib/context.mjs")).canUseLineOrders(ctx, user),

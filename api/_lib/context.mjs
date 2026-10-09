@@ -61,6 +61,7 @@ export async function getContext(env = process.env) {
     ctx.repo = createMemoryRepo({ uuid: newId });
     ctx.storage = createMemoryStorage({ uuid: newId });
     ctx.ai = createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" });
+    ctx.aiMockStaffOnly = env.MOCK_AI_STAFF_ONLY === "1";   // จำลองเว็บจริงที่ตั้ง AI_PROVIDER=mock (ทดสอบในเครื่อง)
     ctx.getSession = async (req) => {
       const m = /(?:^|;\s*)sv_mock_user=([A-Za-z0-9_-]+)/.exec(req.headers.cookie || "");
       return m ? ctx.repo.getUser(m[1]) : null;
@@ -77,6 +78,8 @@ export async function getContext(env = process.env) {
     // AI จริงยังไม่เปิด: ต้องมีระบบลายน้ำฝั่ง Server ก่อน (รออนุมัติแพ็กเกจประมวลผลภาพ)
     // AI_PROVIDER=mock ใช้ทดสอบบน Preview ได้โดยไม่มีค่าใช้จ่าย
     ctx.ai = env.AI_PROVIDER === "mock" ? createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" }) : null;
+    // Mock AI บนเว็บจริงใช้ทดสอบเท่านั้น → เฉพาะบัญชี staff/admin (ตรวจที่ Server)
+    ctx.aiMockStaffOnly = env.AI_PROVIDER === "mock";
     ctx.getSession = async (req) => {
       const auth = await getAuth(env);
       return auth ? sessionFromRequest(auth, req) : null;
@@ -148,4 +151,18 @@ export function canUseLineOrders(ctx, user) {
   if (ctx.config.lineOrdersMode === "on") return Boolean(user);
   if (ctx.config.lineOrdersMode === "staff") return Boolean(user && (user.role === "staff" || user.role === "admin"));
   return false;
+}
+
+const isStaffUser = (user) => Boolean(user && (user.role === "staff" || user.role === "admin"));
+
+// ผู้ใช้คนนี้สร้างภาพ AI ได้หรือไม่ (Mock AI บนเว็บจริง = เฉพาะพนักงาน)
+export function canUseAi(ctx, user) {
+  if (!ctx.ai || !ctx.repo || !ctx.storage) return false;
+  if (ctx.aiMockStaffOnly) return isStaffUser(user);
+  return true;
+}
+
+// งานทดสอบของพนักงานด้วย Mock AI ไม่ใช้เครดิตของใคร
+export function isCreditExempt(ctx, user) {
+  return Boolean(ctx.ai && ctx.ai.name === "mock" && isStaffUser(user));
 }
