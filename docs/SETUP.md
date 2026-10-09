@@ -20,15 +20,18 @@
 
 **ชุดที่ 1 — Private (ภาพลูกค้า / ภาพ AI / ต้นฉบับรูปผลงาน)**
 1. Storage → **Create** → **Blob** → ชื่อ `signverse-private` → Access: **Private**
-2. ตอน Connect กับโปรเจกต์ ตั้ง **Environment Variables Prefix** = `PRIVATE_BLOB`
-3. ตรวจว่ามีตัวแปร `PRIVATE_BLOB_READ_WRITE_TOKEN` ใน Settings → Environment Variables
+2. ตอน Connect กับโปรเจกต์ เลือกทั้ง **Production และ Preview** และตั้ง **Environment Variables Prefix** = `PRIVATE_BLOB`
+3. ตรวจว่ามีตัวแปร `PRIVATE_BLOB_STORE_ID` ใน Settings → Environment Variables
 
 **ชุดที่ 2 — Public (เฉพาะรูปผลงานที่กดเผยแพร่)**
 1. Create → Blob → ชื่อ `signverse-public` → Access: **Public**
-2. Prefix = `PUBLIC_BLOB` → ตรวจว่ามี `PUBLIC_BLOB_READ_WRITE_TOKEN`
+2. Connect (Production + Preview) · Prefix = `PUBLIC_BLOB` → ตรวจว่ามี `PUBLIC_BLOB_STORE_ID`
 
-> ถ้า Vercel ตั้งชื่อตัวแปรต่างจากนี้ ให้เพิ่มตัวแปรชื่อตามคู่มือเอง แล้วคัดลอกค่า token มาใส่
-> ห้ามใช้ store Public เก็บภาพลูกค้า — โค้ดแยกให้แล้ว แค่อย่าสลับ token
+> ระบบใช้ **Store ID + Vercel OIDC** — Vercel ส่ง OIDC token มากับทุก request เอง จึง**ไม่ต้องมี** `*_READ_WRITE_TOKEN`
+> และจะไม่เห็น `VERCEL_OIDC_TOKEN` ในหน้า Environment Variables (ปกติ) · ต้องเปิด OIDC ไว้ (Settings → Security → Secure backend access with OIDC federation — ค่าเริ่มต้นเปิด)
+> ถ้ามี `PRIVATE_BLOB_READ_WRITE_TOKEN` / `PUBLIC_BLOB_READ_WRITE_TOKEN` ระบบจะใช้ token ก่อน (ทางเลือก)
+> ถ้าตั้งไม่ครบทั้งสอง store หรือ Store ID ซ้ำกัน ระบบไฟล์จะปิด (ตอบ `not_configured`) — ไม่มีทางเก็บไฟล์ลูกค้าใน store Public
+> `*_BLOB_WEBHOOK_PUBLIC_KEY` ระบบนี้ไม่ได้ใช้ ปล่อยไว้ได้
 
 ## 3. ตั้งค่า Better Auth
 

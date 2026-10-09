@@ -85,6 +85,7 @@ Breakpoints: `640px`, `960px` (min-width)
 - Auth: **Better Auth** (`api/_lib/auth.mjs`, `api/auth/[...all].mjs`) — Google/LINE/Facebook, ไม่มีรหัสผ่าน, role: customer/staff/admin (`input:false`)
 - DB: Neon (`db/schema.sql`), repo: `api/_lib/repo-pg.mjs` (จริง) / `repo-memory.mjs` (mock+tests) อินเทอร์เฟซเดียวกัน
 - Storage: Blob Private (ภาพลูกค้า/AI/ต้นฉบับผลงาน) + Public (เฉพาะผลงานที่เผยแพร่) — `api/_lib/storage.mjs`; อ่าน private ผ่าน `/api/files` ที่ตรวจสิทธิ์เท่านั้น
+  - เลือก store ด้วย `PRIVATE_BLOB_STORE_ID` / `PUBLIC_BLOB_STORE_ID` + Vercel OIDC (หรือ `*_BLOB_READ_WRITE_TOKEN` ถ้ามี ใช้ก่อน) · ส่ง storeId ทุกคำสั่ง + ตรวจ host ของ URL ไฟล์ · ห้ามพึ่ง `BLOB_READ_WRITE_TOKEN`/`BLOB_STORE_ID` ค่าเริ่มต้น · แก้ต้องรัน `tests/storage.test.mjs`
 - Quota/Job state machine: `api/_lib/jobs.mjs` (1 สิทธิ์ = Artwork+Mockup, idempotency key, refund rules) — แก้ต้องรัน `tests/jobs.test.mjs`
 - API (Hobby จำกัด 12 functions — ตอนนี้ 11): me, gallery, upload, ai, files, admin, cron-cleanup, auth, ai-brief, estimate-price, line/webhook
 - LINE OA @signverse (คำสั่งผลิต): ลูกค้ากด "สั่งผลิตป้ายนี้" → บันทึก `production_orders` (เลขออร์เดอร์ + claim_code) → `oaMessage` ให้ลูกค้ากดส่งเอง → `api/line/webhook.mjs` ตรวจลายเซ็น → `api/_lib/delivery.mjs` reply รูปกลับในแชตเดียวกัน (ครั้งเดียว, ผูก LINE userId) · ทาง B: `liff/order.html` (`liff.sendMessages`, ตรวจ ID token) · สถานะการส่ง `line_delivery_status` แยกจาก `status` การผลิต

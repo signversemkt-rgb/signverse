@@ -3,7 +3,7 @@
 //   ไม่ใช่ mock    → Neon + Vercel Blob + Better Auth (ต้องตั้งค่าครบ ไม่งั้นตอบ not_configured)
 import { HttpError, allowedOrigins } from "./http.mjs";
 import { createMemoryRepo } from "./repo-memory.mjs";
-import { createMemoryStorage } from "./storage.mjs";
+import { createMemoryStorage, createVercelStorage, resolveBlobConfig } from "./storage.mjs";
 import { createMockProvider } from "./ai-mock.mjs";
 import { enabledProviders, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
 import { createLineClient } from "./line.mjs";
@@ -71,9 +71,12 @@ export async function getContext(env = process.env) {
       const [{ Pool }, { createPgRepo }] = await Promise.all([import("@neondatabase/serverless"), import("./repo-pg.mjs")]);
       ctx.repo = createPgRepo({ Pool, connectionString: env.DATABASE_URL, uuid: newId });
     }
-    if (env.PRIVATE_BLOB_READ_WRITE_TOKEN && env.PUBLIC_BLOB_READ_WRITE_TOKEN) {
-      const [blob, { createVercelStorage }] = await Promise.all([import("@vercel/blob"), import("./storage.mjs")]);
-      ctx.storage = createVercelStorage({ blob, privateToken: env.PRIVATE_BLOB_READ_WRITE_TOKEN, publicToken: env.PUBLIC_BLOB_READ_WRITE_TOKEN });
+    // Blob: token แยกของแต่ละ store หรือ Store ID + OIDC (ดู storage.mjs) — ตั้งไม่ครบ/ชี้ store เดียวกัน = ปิดระบบไฟล์
+    const blobConfig = resolveBlobConfig(env);
+    if (blobConfig?.error) console.error(`[storage] disabled: ${blobConfig.error}`);   // ไม่ log ค่าตัวแปร
+    else if (blobConfig) {
+      const blob = await import("@vercel/blob");
+      ctx.storage = createVercelStorage({ blob, config: blobConfig });
     }
     // AI จริงยังไม่เปิด: ต้องมีระบบลายน้ำฝั่ง Server ก่อน (รออนุมัติแพ็กเกจประมวลผลภาพ)
     // AI_PROVIDER=mock ใช้ทดสอบบน Preview ได้โดยไม่มีค่าใช้จ่าย
