@@ -478,6 +478,18 @@
             <p class="aidesign__quota" id="aiQuota" hidden></p>
           </div>
           <p class="aistatus" id="aiStatus" role="status" hidden></p>
+          <!-- โหมดทดสอบ AI จริง (เจ้าของเว็บไซต์) — แสดงเมื่อเปิดหน้าด้วย ?aitest · รหัสตรวจที่ Server เท่านั้น -->
+          <div class="aitest" id="aiTestBox" hidden>
+            <form class="aitest__form" id="aiTestForm" autocomplete="off">
+              <label class="aitest__label" for="aiTestCode">รหัสทดสอบ AI (สำหรับเจ้าของเว็บไซต์)</label>
+              <div class="aitest__row">
+                <input class="aitest__input" id="aiTestCode" type="password" autocomplete="off" maxlength="200">
+                <button type="submit" class="btn btn--outline" id="aiTestSubmit">เข้าโหมดทดสอบ</button>
+              </div>
+            </form>
+            <p class="aitest__active" id="aiTestActive" hidden>🔧 โหมดทดสอบ AI จริงเปิดอยู่ (ใช้งบทดลอง) · <button type="button" class="otp__link" id="aiTestLogout">ออกจากโหมดทดสอบ</button></p>
+            <p class="brief__error" id="aiTestError" role="alert" hidden></p>
+          </div>
 
           <div class="aidesign__block">
             <h4>เลือกจากผลงาน SIGN VERSE <small id="refCount">(เลือกแล้ว 0/3)</small></h4>

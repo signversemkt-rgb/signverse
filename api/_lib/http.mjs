@@ -35,6 +35,10 @@ const MESSAGES = {
   bad_signature: "ลายเซ็นไม่ถูกต้อง",
   feature_disabled: "ฟีเจอร์นี้ปิดใช้งานอยู่",
   line_failed: "ส่งข้อความเข้า LINE ไม่สำเร็จ กรุณาลองใหม่ (ระบบจะไม่ส่งซ้ำ)",
+  db_migration_required: "ฐานข้อมูลยังไม่ได้อัปเดตสำหรับฟีเจอร์นี้ — ผู้ดูแลต้องรัน db/schema.sql ใน Neon ก่อน",
+  ai_test_bad_code: "รหัสทดสอบไม่ถูกต้อง",
+  ai_test_budget: "งบทดลอง AI ใกล้ครบหรือครบแล้ว — หยุดทดสอบเพื่อไม่ให้เกินงบที่กำหนด",
+  ai_test_limit: "ครบจำนวนงานทดสอบที่กำหนดแล้ว",
   ai_budget_day: "วันนี้ระบบสร้างภาพ AI ถึงจำนวนที่กำหนดแล้ว กรุณาลองใหม่พรุ่งนี้ หรือทักทีมงานทาง LINE",
   ai_budget_month: "ระบบสร้างภาพ AI ปิดชั่วคราวในเดือนนี้ กรุณาทักทีมงานทาง LINE เพื่อออกแบบป้ายได้เลย",
   guest_limit: "วันนี้คุณสร้างภาพครบจำนวนฟรีแล้ว ลองใหม่พรุ่งนี้ หรือทักทีมงานทาง LINE เพื่อออกแบบต่อได้เลย",
@@ -63,8 +67,15 @@ export function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+// ฐานข้อมูลยังไม่ได้รัน db/schema.sql ล่าสุด (Postgres: ไม่มีคอลัมน์ 42703 / ไม่มีตาราง 42P01)
+export const isMissingSchema = (err) => Boolean(err && (err.code === "42703" || err.code === "42P01"));
+
 export function sendError(res, err) {
   if (err instanceof HttpError) return sendJson(res, err.status, errorBody(err.code));
+  if (isMissingSchema(err)) {
+    console.error("[api] database schema is outdated — run db/schema.sql");
+    return sendJson(res, 503, errorBody("db_migration_required"));
+  }
   console.error("[api] unexpected error:", err && err.name, err && err.message);
   return sendJson(res, 500, errorBody("server_error"));
 }

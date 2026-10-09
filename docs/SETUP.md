@@ -203,6 +203,30 @@
 
 4. Redeploy → พนักงานล็อกอินแล้วทดสอบสร้างภาพ (ไม่ใช้เครดิตลูกค้า แต่นับในงบรวม)
 
+### โหมดทดสอบ AI จริงสำหรับเจ้าของเว็บ (ไม่ต้องสมัครสมาชิก · งบแยก)
+
+ใช้ทดสอบ OpenAI จริงผ่านหน้าเว็บจริงก่อนเปิดให้ลูกค้า — ผู้เข้าชมทั่วไปใช้ไม่ได้ (ต้องมีรหัส · ตรวจที่ Server)
+
+1. ต้องรัน `db/schema.sql` ล่าสุดแล้ว (คอลัมน์ `guest_id`, `cost_usd`, `artwork_original_key`)
+2. OpenAI → Billing → ตั้ง **Project budget / Usage limit** เช่น $3 เป็นชั้นป้องกันสุดท้าย (ยอดเรียกเก็บจริงดูที่ OpenAI)
+3. Vercel → Environment Variables (Production):
+
+| ตัวแปร | ค่า |
+|---|---|
+| `AI_PROVIDER` | `openai` |
+| `AI_TEST_MODE` | `true` (ลบออก = ปิดโหมดทดสอบทันทีหลัง Redeploy) |
+| `AI_TEST_CODE` | รหัสทดสอบยาว ≥ 12 ตัว เช่นสุ่มด้วย `openssl rand -base64 18` (ห้ามแชร์ · เปลี่ยนรหัส = เซสชันเดิมใช้ไม่ได้) |
+| `AI_TEST_BUDGET_THB` | `100` (ค่าเริ่มต้น) — งบทดลองรวม แยกจากงบใช้งานจริง |
+| `AI_TEST_MAX_JOBS` | `12` (ค่าเริ่มต้น) — จำนวนงานทดสอบสูงสุด (1 งาน = Artwork + Mockup) |
+| `AI_TEST_SESSION_MINUTES` | `120` (ค่าเริ่มต้น) — อายุเซสชันทดสอบ |
+
+ไม่ต้องตั้ง `AI_ACCESS` และ `GUEST_AI_ENABLED` (ลูกค้ายังใช้ไม่ได้)
+
+4. Redeploy → เปิด `https://signverse-azure.vercel.app/?aitest#ai-design` → กรอกรหัสทดสอบ → กรอกฟอร์ม/อัปโหลดรูป → กด "สร้างภาพป้ายด้วย AI จริง (โหมดทดสอบ)"
+5. หน้าเว็บแสดงยอดใช้ไปโดยประมาณ (คำนวณจาก usage ที่ OpenAI ส่งกลับ) — **ยอดเรียกเก็บจริงอาจต่างเล็กน้อย** ให้ตรวจที่ OpenAI → Usage ด้วย
+
+ระบบหยุดเองเมื่อ: ยอดใช้ไป + ค่าประมาณงานถัดไป (8 บาท) เกินงบ · ครบจำนวนงาน · รหัสผิดเกิน 5 ครั้ง/15 นาที/IP
+
 ### Cloudflare Turnstile (กันบอท — ต้องตั้งก่อนเปิด Guest AI)
 1. dash.cloudflare.com → **Turnstile** → **Add widget** → Hostname `signverse-azure.vercel.app` → Widget mode **Managed**
 2. Vercel → `TURNSTILE_SITE_KEY` (Site Key) และ `TURNSTILE_SECRET_KEY` (Secret Key) → Redeploy

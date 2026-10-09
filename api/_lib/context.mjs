@@ -9,6 +9,7 @@ import { enabledLoginMethods, phoneLoginStatus, getAuth, sessionFromRequest, aut
 import { phoneLoginConfig, createOtpService } from "./phone.mjs";
 import { guestConfig, guestAiState, readGuestId, ensureGuestId, aiBudgetConfig } from "./guest.mjs";
 import { createOpenAIProvider } from "./ai-openai.mjs";
+import { aiTestConfig, readTestSession, testOwnerId } from "./aitest.mjs";
 import { createLineClient } from "./line.mjs";
 
 const int = (v, d) => {
@@ -55,6 +56,7 @@ export async function getContext(env = process.env) {
       liffChannelId: env.LINE_LOGIN_CHANNEL_ID || "",     // ใช้ตรวจ LIFF ID token ฝั่ง Server
       guest: guestConfig(env, { mock }),                  // สร้างภาพ AI โดยไม่ต้องสมัครสมาชิก (GUEST_AI_ENABLED)
       aiBudget: aiBudgetConfig(env),                      // งบ AI ทั้งระบบ: ต่อวัน / ต่อเดือน
+      aiTest: aiTestConfig(env),                          // โหมดทดสอบ AI จริงของเจ้าของเว็บ (AI_TEST_MODE + รหัส)
     },
     // ปุ่มเข้าสู่ระบบบนหน้าเว็บ: social = ["facebook"] (LINE/Google ปิด — เปิดได้ด้วย AUTH_PROVIDERS) + สถานะเบอร์โทร
     providers: enabledLoginMethods(env, { mock }),
@@ -134,6 +136,9 @@ export async function resolveActor(ctx, req, res, { create = false } = {}) {
     if (user.accountStatus === "suspended") throw new HttpError(403, "suspended");
     return { user, userId: user.id, guestId: null };
   }
+  // เซสชันทดสอบของเจ้าของเว็บ (ยืนยันรหัสแล้ว · cookie HttpOnly อายุสั้น) — ใช้ AI จริงด้วยงบทดลองแยก
+  const test = readTestSession(ctx, req);
+  if (test) return { user: null, userId: null, guestId: testOwnerId(test.sid), test: true };
   if (guestAiState(ctx) === "ready") {
     const guestId = create ? ensureGuestId(ctx, req, res) : readGuestId(ctx, req);
     if (guestId) return { user: null, userId: null, guestId };

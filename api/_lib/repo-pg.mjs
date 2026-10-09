@@ -22,12 +22,15 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
   // ค่าใช้จ่าย AI (บาท) ตั้งแต่ช่วงเวลา — นับแบบไม่ให้ต่ำกว่าจริง · ไม่นับงาน Mock
   //   ค่าจริง (cost_usd) + ครั้งที่ไม่รู้ค่า (หมดเวลา/ล้มเหลว/กำลังทำ) ครั้งละครึ่งของค่าประมาณต่องาน
   //   งานที่ยังไม่จบ นับอย่างน้อยค่าประมาณต่องาน (Mockup ยังต้องสร้าง)
-  const aiSpend = async (since, { estimateThb, usdThb }, client = pool) => Number((await q(
+  //   mode = "test" → เฉพาะงานโหมดทดสอบ (งบแยก) · ค่าอื่น → ไม่รวมงานโหมดทดสอบ
+  const aiSpend = async (since, { estimateThb, usdThb, mode = "live" }, client = pool) => Number((await q(
     `SELECT coalesce(sum(CASE WHEN status IN ('completed', 'failed') THEN spent ELSE greatest(spent, $3) END), 0) AS thb FROM (
        SELECT status, coalesce(cost_usd, 0) * $2
               + greatest(attempts - (artwork_status = 'done')::int - (mockup_status = 'done')::int, 0) * ($3 / 2.0) AS spent
-         FROM ai_jobs WHERE created_at >= $1 AND coalesce(input->>'provider', '') NOT IN ('', 'mock')) s`,
-    [since, usdThb, estimateThb], client))[0].thb);
+         FROM ai_jobs WHERE created_at >= $1 AND coalesce(input->>'provider', '') NOT IN ('', 'mock')
+          AND ((input->>'mode') = 'test') = ($4 = 'test')) s`,
+    [since, usdThb, estimateThb, mode], client))[0].thb);
+  const countTest = async (client = pool) => Number((await q(`SELECT count(*) FROM ai_jobs WHERE input->>'mode' = 'test'`, [], client))[0].count);
 
   const txApi = (c) => ({
     async userExists(userId) { return (await q(`SELECT 1 FROM "user" WHERE "id" = $1`, [userId], c)).length > 0; },
@@ -54,6 +57,7 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
     async countGuestActiveJobs(guestId) { return Number((await q(`SELECT count(*) FROM ai_jobs WHERE guest_id = $1 AND status IN ('pending','processing')`, [guestId], c))[0].count); },
     async countGuestJobsSince(o) { return countGuest(o, c); },
     async aiSpendThbSince(since, o) { return aiSpend(since, o, c); },
+    async countTestJobs() { return countTest(c); },
     async getJobForUpdate(jobId) { return (await q(`SELECT * FROM ai_jobs WHERE job_id = $1 FOR UPDATE`, [jobId], c))[0] || null; },
     async updateJob(jobId, patch) {
       const s = setClause(patch, JOB_COLS, 2);
@@ -96,6 +100,7 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
     async listJobsByGuest(guestId, limit = 10) { return q(`SELECT * FROM ai_jobs WHERE guest_id = $1 ORDER BY created_at DESC LIMIT $2`, [guestId, limit]); },
     async countGuestJobsSince(o) { return countGuest(o); },
     async aiSpendThbSince(since, o) { return aiSpend(since, o); },
+    async countTestJobs() { return countTest(); },
     async listProblemJobs(staleBefore, limit = 50) {
       return q(`SELECT * FROM ai_jobs WHERE credit_state = 'reserved'
                 AND (artwork_status = 'unknown' OR mockup_status = 'unknown' OR (status IN ('pending','processing') AND updated_at < $1))

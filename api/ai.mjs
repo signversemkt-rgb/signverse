@@ -7,10 +7,12 @@
 //   GET  /api/ai?orders=1     → คำขอสั่งผลิตของฉัน (พร้อมสถานะการส่งผ่าน LINE)
 //   POST /api/ai {action:"liffOrders"|"liffPrepare"|"liffResult", idToken, …}  → หน้า LIFF (ยืนยันตัวตนด้วย LINE ID token)
 import { route } from "./_lib/route.mjs";
-import { sendJson, readJson, query, HttpError, assertSameOrigin, getIp, cleanText, isId } from "./_lib/http.mjs";
+import { sendJson, readJson, query, HttpError, assertSameOrigin, getIp, cleanText, isId, isMissingSchema } from "./_lib/http.mjs";
 import { need, rateLimit, verifyTurnstile, canUseLineOrders, canUseAi, isCreditExempt, resolveActor } from "./_lib/context.mjs";
 import { createJob, runStep, jobView, quotaView, isJobOwner } from "./_lib/jobs.mjs";
 import { ipHash, dayStart, guestUsage, budgetNow } from "./_lib/guest.mjs";
+import { testLogin, testLogout, testUsage } from "./_lib/aitest.mjs";
+import { createTestJob } from "./_lib/jobs.mjs";
 import { LIMITS } from "./_lib/images.mjs";
 import { generateOrderNo, generateClaimCode, estimateFromForm, cleanOrderForm, orderView } from "./_lib/orders.mjs";
 import { verifyLiffIdToken, liffListOrders, liffPrepare, liffResult } from "./_lib/delivery.mjs";
@@ -58,7 +60,7 @@ export async function buildInput(ctx, owner, body) {
 }
 
 // ---------- Guest (ไม่ต้องสมัครสมาชิก) — สร้าง/ดูงานของตัวเองเท่านั้น · สั่งผลิตผ่าน LINE OA ของร้านตามเดิม ----------
-async function handleGuest(req, res, ctx, { guestId }) {
+async function handleGuest(req, res, ctx, { guestId, test = false }) {
   need(ctx, "storage");
   if (req.method === "GET") {
     const q = query(req);
@@ -70,11 +72,24 @@ async function handleGuest(req, res, ctx, { guestId }) {
     }
     if (q.orders) throw new HttpError(401, "unauthenticated");
     const jobs = await ctx.repo.listJobsByGuest(guestId, 5);
+    if (test) return sendJson(res, 200, { jobs: jobs.map(jobView), test: await testUsage(ctx) });
     return sendJson(res, 200, { jobs: jobs.map(jobView), guest: await guestUsage(ctx, guestId, getIp(req)) });
   }
   if (req.method !== "POST") throw new HttpError(405, "bad_request");
   assertSameOrigin(req, ctx.config.origins);
   const body = req.body;
+  if (body.action === "create" && test) {
+    // โหมดทดสอบ: งบ/จำนวนงานแยก ตรวจก่อนเรียก AI ภายใต้ล็อกเดียวกับงบ AI (กันกดซ้ำ/คำขอพร้อมกัน)
+    await rateLimit(ctx, `ai-test:${guestId}`, 20, 3600);
+    const input = await buildInput(ctx, { guestId }, body);
+    input.provider = ctx.ai.name;
+    const b = ctx.config.aiBudget;
+    const { job, created } = await createTestJob({
+      repo: ctx.repo, ownerId: guestId, idempotencyKey: body.idempotencyKey, input, uuid: ctx.uuid,
+      test: ctx.config.aiTest, estimate: { estimateThb: b.estimateThb, usdThb: b.usdThb },
+    });
+    return sendJson(res, created ? 201 : 200, { job: jobView(job), created, test: await testUsage(ctx) });
+  }
   if (body.action === "create") {
     const ip = getIp(req);
     await rateLimit(ctx, `ai-guest:${guestId}`, 10, 3600);           // กันยิงถี่ (เพดานงานจริงตรวจใน createJob)
@@ -92,8 +107,13 @@ async function handleGuest(req, res, ctx, { guestId }) {
   if (body.action === "step") {
     if (!isId(body.jobId)) throw new HttpError(400, "bad_request");
     await rateLimit(ctx, `ai-guest-step:${guestId}`, 30, 3600);
+    // โหมดทดสอบ: ตรวจงบอีกครั้งก่อนเรียก AI แต่ละขั้น (กันลองซ้ำจนเกินงบ)
+    if (test) {
+      const u = await testUsage(ctx);
+      if (u.spentThb > u.budgetThb) throw new HttpError(503, "ai_test_budget");
+    }
     const job = await runStep({ repo: ctx.repo, storage: ctx.storage, provider: ctx.ai, guestId, jobId: body.jobId, step: body.step });
-    return sendJson(res, 200, { job: jobView(job) });
+    return sendJson(res, 200, { job: jobView(job), ...(test ? { test: await testUsage(ctx) } : {}) });
   }
   // สั่งผลิตผ่านระบบออร์เดอร์ต้องเป็นสมาชิก — Guest ติดต่อร้านทาง LINE OA ได้ทันที
   throw new HttpError(401, "unauthenticated");
@@ -123,6 +143,19 @@ export default route(async (req, res, ctx) => {
     if (["liffOrders", "liffPrepare", "liffResult"].includes(req.body.action)) {
       assertSameOrigin(req, ctx.config.origins);
       return handleLiff(req, res, ctx, req.body);
+    }
+    // โหมดทดสอบ AI: ยืนยันรหัส / ออกจากโหมด (ตรวจรหัสฝั่ง Server เท่านั้น)
+    if (req.body.action === "testLogin") {
+      assertSameOrigin(req, ctx.config.origins);
+      const r = await testLogin(ctx, req, res, req.body.code, getIp(req));
+      let usage = null;
+      try { usage = await testUsage(ctx); } catch (err) { if (!isMissingSchema(err)) throw err; usage = { error: "db_migration_required" }; }
+      return sendJson(res, 200, { ok: true, expiresAt: r.expiresAt, usage });
+    }
+    if (req.body.action === "testLogout") {
+      assertSameOrigin(req, ctx.config.origins);
+      testLogout(ctx, res);
+      return sendJson(res, 200, { ok: true });
     }
   }
   // สมาชิก หรือ Guest (GUEST_AI_ENABLED) — ตรวจที่ Server ทุกคำขอ

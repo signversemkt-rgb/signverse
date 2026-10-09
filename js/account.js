@@ -61,6 +61,7 @@
         aiStatus: typeof data.aiStatus === "string" ? data.aiStatus : (data.user ? "coming_soon" : "login_required"),
         aiReady: Boolean(data.aiReady),
         guest: data.guest && typeof data.guest === "object" ? data.guest : null,     // Guest: { state, remainingToday, paused }
+        aiTest: data.aiTest && typeof data.aiTest === "object" ? data.aiTest : null, // โหมดทดสอบ AI ของเจ้าของเว็บ
         turnstileSiteKey: data.turnstileSiteKey || null,
         mock: Boolean(data.mock),
         lineOrders: Boolean(data.lineOrders),

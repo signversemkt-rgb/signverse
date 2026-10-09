@@ -4,8 +4,9 @@ import { route } from "./_lib/route.mjs";
 import { sendJson, query, readJson, HttpError, assertSameOrigin } from "./_lib/http.mjs";
 import { quotaView } from "./_lib/jobs.mjs";
 import { canUseAi, canUseLineOrders, aiStatus, aiReadyForCustomers } from "./_lib/context.mjs";
-import { getIp } from "./_lib/http.mjs";
+import { getIp, isMissingSchema } from "./_lib/http.mjs";
 import { guestAiState, guestUsage, readGuestId } from "./_lib/guest.mjs";
+import { aiTestReady, readTestSession, testUsage } from "./_lib/aitest.mjs";
 
 export default route(async (req, res, ctx) => {
   if (req.method === "POST" && ctx.mock) {
@@ -32,14 +33,27 @@ export default route(async (req, res, ctx) => {
   const gState = user ? "off" : guestAiState(ctx);
   if (gState === "ready") guest = { state: gState, ...(await guestUsage(ctx, readGuestId(ctx, req), getIp(req))) };
   else if (gState === "coming_soon") guest = { state: gState, remainingToday: 0, paused: false };
+  // โหมดทดสอบ AI ของเจ้าของเว็บ: แสดงเฉพาะว่ามีโหมดนี้ และสถานะเซสชันของผู้เรียกเอง (ไม่มีข้อมูลลับ)
+  let aiTest = null;
+  if (!user && aiTestReady(ctx)) {
+    const session = readTestSession(ctx, req);
+    if (session) {
+      // ฐานข้อมูลยังไม่ได้รัน migration → แจ้งในกล่องทดสอบ แต่ /api/me ยังทำงานตามปกติ
+      let usage;
+      try { usage = await testUsage(ctx); } catch (err) { if (!isMissingSchema(err)) throw err; usage = { exhausted: true, error: "db_migration_required" }; }
+      aiTest = { enabled: true, active: true, expiresAt: new Date(session.exp * 1000).toISOString(), ...usage };
+    } else aiTest = { enabled: true, active: false };
+  }
+  const status = aiTest && aiTest.active ? (aiTest.exhausted ? "test_limit" : "test_ready") : aiStatus(ctx, user, guest);
   sendJson(res, 200, {
     user: user ? { id: user.id, name: user.name, role: user.role, image: user.image || null } : null,
     quota,
     providers: ctx.authReady ? ctx.providers : [],
     phoneLogin: ctx.authReady ? ctx.phoneLogin : "off",           // ready | coming_soon | off (coming_soon = ยังไม่มีผู้ส่ง SMS จริง)
     aiAvailable: canUseAi(ctx, user),
-    aiStatus: aiStatus(ctx, user, guest),
+    aiStatus: status,
     guest,
+    aiTest,
     aiReady: aiReadyForCustomers(ctx),
     turnstileSiteKey: ctx.config.turnstileSiteKey || null,
     liffId: ctx.config.liffId || null,

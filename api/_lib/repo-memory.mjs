@@ -22,8 +22,10 @@ export function createMemoryRepo({ uuid }) {
   const countGuest = (since, guestId, ipHash) => [...db.jobs.values()].filter((j) => j.guest_id && new Date(j.created_at) >= since
     && (!guestId || j.guest_id === guestId) && (!ipHash || j.guest_ip_hash === ipHash)).length;
   // ค่าใช้จ่าย AI (บาท) แบบไม่ให้ต่ำกว่าจริง — เหมือน repo-pg.mjs
-  const aiSpend = (since, { estimateThb, usdThb }) => [...db.jobs.values()]
-    .filter((j) => new Date(j.created_at) >= since && j.input?.provider && j.input.provider !== "mock")
+  const isTest = (j) => j.input?.mode === "test";
+  const countTest = () => [...db.jobs.values()].filter(isTest).length;
+  const aiSpend = (since, { estimateThb, usdThb, mode = "live" }) => [...db.jobs.values()]
+    .filter((j) => new Date(j.created_at) >= since && j.input?.provider && j.input.provider !== "mock" && isTest(j) === (mode === "test"))
     .reduce((sum, j) => {
       const done = (j.artwork_status === "done") + (j.mockup_status === "done");
       const spent = (j.cost_usd || 0) * usdThb + Math.max(j.attempts - done, 0) * (estimateThb / 2);
@@ -73,6 +75,7 @@ export function createMemoryRepo({ uuid }) {
     },
     async countGuestJobsSince({ since, guestId, ipHash }) { return countGuest(since, guestId, ipHash); },
     async aiSpendThbSince(since, o) { return aiSpend(since, o); },
+    async countTestJobs() { return countTest(); },
     async updateJob(jobId, patch) { db.jobs.set(jobId, { ...db.jobs.get(jobId), ...clone(patch) }); },
     async audit(actorId, action, target, detail) {
       db.audit.push({ event_id: uuid(), actor_id: actorId, action, target, detail, created_at: new Date().toISOString() });
@@ -104,6 +107,7 @@ export function createMemoryRepo({ uuid }) {
     },
     async countGuestJobsSince({ since, guestId, ipHash }) { return countGuest(since, guestId, ipHash); },
     async aiSpendThbSince(since, o) { return aiSpend(since, o); },
+    async countTestJobs() { return countTest(); },
     async listJobsByUser(userId, limit = 20) {
       return clone([...db.jobs.values()].filter((j) => j.user_id === userId).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit));
     },

@@ -76,6 +76,30 @@ async function createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uu
   });
 }
 
+// งานโหมดทดสอบของเจ้าของเว็บ (AI_TEST_MODE): งบแยก + จำนวนงานสูงสุด ตรวจภายใต้ล็อกเดียวกับงบ AI ก่อนเรียก AI
+//   test = { budgetThb, maxJobs } · estimate = { estimateThb, usdThb }
+export async function createTestJob({ repo, ownerId, idempotencyKey, input, uuid, now = Date.now(), test, estimate }) {
+  if (!/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey || "")) throw new HttpError(400, "bad_request");
+  return repo.tx(async (t) => {
+    await t.lockAiBudget();
+    const existing = await t.findGuestJobByIdem(ownerId, idempotencyKey);
+    if (existing) return { job: existing, created: false };
+    if (await t.countGuestActiveJobs(ownerId)) throw new HttpError(409, "job_in_progress");
+    if ((await t.countTestJobs()) >= test.maxJobs) throw new HttpError(503, "ai_test_limit");
+    const spent = await t.aiSpendThbSince(new Date(0), { ...estimate, mode: "test" });
+    if (spent + estimate.estimateThb > test.budgetThb) throw new HttpError(503, "ai_test_budget");
+    const job = {
+      job_id: uuid(), user_id: null, guest_id: ownerId, guest_ip_hash: null, idempotency_key: idempotencyKey,
+      status: "pending", artwork_status: "pending", mockup_status: "pending", artwork_storage_key: null, mockup_storage_key: null,
+      credit_state: "guest", attempts: 0, input: { ...input, mode: "test" }, error_code: null,
+      created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString(),
+    };
+    await t.insertJob(job);
+    await t.audit(null, "ai_test_job_created", job.job_id, {});
+    return { job, created: true };
+  });
+}
+
 // จองสิทธิ์และสร้างงาน (Idempotent ด้วย idempotencyKey)
 export async function createJob({ repo, userId, guestId, ipHash, guestLimits, dayStart, budget, idempotencyKey, input, dailyLimit, defaultCredits, uuid, now = Date.now(), exempt = false }) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey || "")) throw new HttpError(400, "bad_request");
@@ -150,7 +174,7 @@ export async function runStep({ repo, storage, provider, userId, guestId, jobId,
       ? await provider.generateArtwork(job.input)
       : await provider.generateMockup(job.input, await storage.getPrivate(job.artwork_original_key || job.artwork_storage_key));
   } catch (err) {
-    return finishFailure({ repo, jobId, step, unknown: Boolean(err && err.unknown), now });
+    return finishFailure({ repo, jobId, step, unknown: Boolean(err && err.unknown), now, detail: errorDetail(err) });
   }
 
   // 3) เก็บไฟล์ใน Private Blob แล้วบันทึกผล + ใช้สิทธิ์ (ครั้งเดียวต่องาน)
@@ -176,11 +200,19 @@ export async function runStep({ repo, storage, provider, userId, guestId, jobId,
   });
 }
 
-async function finishFailure({ repo, jobId, step, unknown, now }) {
+// รายละเอียดข้อผิดพลาดจากผู้ให้บริการ AI ที่ปลอดภัยต่อการแสดง (รหัสสถานะ/ประเภทเท่านั้น ไม่มีข้อความ prompt หรือ key)
+function errorDetail(err) {
+  if (!err) return "";
+  const parts = [err.message, err.code].filter((x) => typeof x === "string" && x).map((x) => x.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 40));
+  return parts.filter((x) => x).join(":").slice(0, 80);
+}
+
+async function finishFailure({ repo, jobId, step, unknown, now, detail = "" }) {
   const statusKey = `${step}_status`;
   return repo.tx(async (t) => {
     const cur = await t.getJobForUpdate(jobId);
-    const patch = { [statusKey]: unknown ? "unknown" : "failed", error_code: unknown ? "timeout_unknown" : "ai_failed", updated_at: new Date(now()).toISOString() };
+    const base = unknown ? "timeout_unknown" : "ai_failed";
+    const patch = { [statusKey]: unknown ? "unknown" : "failed", error_code: detail ? `${base}:${detail}` : base, updated_at: new Date(now()).toISOString() };
     const anyDone = cur.artwork_status === "done" || cur.mockup_status === "done";
     if (anyDone) {
       patch.status = "partial";                       // ทำภาพที่เหลือต่อได้โดยไม่ใช้สิทธิ์ใหม่

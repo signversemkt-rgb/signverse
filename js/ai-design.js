@@ -38,8 +38,10 @@
   const statusBox = $("aiStatus");
   const GEN_LABEL = "สร้างภาพป้ายด้วย AI ฟรี";
   const GEN_LABEL_GUEST = "สร้างภาพป้ายด้วย AI ฟรี ไม่ต้องสมัครสมาชิก";
-  const isGuestMode = (acc) => ["guest_ready", "guest_limit"].includes(acc.aiStatus);
-  const genLabelFor = (acc) => (isGuestMode(acc) ? GEN_LABEL_GUEST : GEN_LABEL);
+  const isTestMode = (acc) => ["test_ready", "test_limit"].includes(acc.aiStatus);
+  // สร้างภาพได้โดยไม่ล็อกอิน: Guest (เปิดให้ลูกค้า) หรือโหมดทดสอบของเจ้าของเว็บ — Server ตรวจสิทธิ์อีกชั้นเสมอ
+  const isGuestMode = (acc) => ["guest_ready", "guest_limit"].includes(acc.aiStatus) || isTestMode(acc);
+  const genLabelFor = (acc) => (isTestMode(acc) ? "สร้างภาพป้ายด้วย AI จริง (โหมดทดสอบ)" : isGuestMode(acc) ? GEN_LABEL_GUEST : GEN_LABEL);
 
   const showError = (msg) => { errBox.textContent = msg || ""; errBox.hidden = !msg; };
   const showNotice = (msg) => { notice.textContent = msg || ""; notice.hidden = !msg; };
@@ -365,7 +367,7 @@
 
   function setBusy(b) {
     state.busy = b;
-    genBtn.disabled = b || ["coming_soon", "guest_limit"].includes(window.SVAccount.state.aiStatus);
+    genBtn.disabled = b || ["coming_soon", "guest_limit", "test_limit"].includes(window.SVAccount.state.aiStatus);
     genLabel.textContent = b ? "กำลังสร้างภาพ…" : genLabelFor(window.SVAccount.state);
   }
 
@@ -380,6 +382,8 @@
         ? "เข้าสู่ระบบด้วย Facebook หรือเบอร์โทรศัพท์ เพื่อใช้สิทธิ์สร้างภาพป้ายฟรี 1 ครั้ง (Artwork + Mockup)"
         : "ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ — กรอกข้อมูลและเลือกรูปไว้ก่อนได้ หรือเข้าสู่ระบบไว้รอรับสิทธิ์ฟรี 1 ครั้ง",
       coming_soon: "ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ — ยังไม่มีการอัปโหลดรูปหรือใช้สิทธิ์ของคุณ ระหว่างนี้ทักทีมงานทาง LINE เพื่อออกแบบป้ายได้เลย",
+      test_ready: "🔧 โหมดทดสอบ AI จริง (เฉพาะเจ้าของเว็บไซต์) — ใช้ OpenAI จริงและงบทดลอง ยังไม่ได้เปิดให้ลูกค้า",
+      test_limit: "งบทดลองหรือจำนวนงานทดสอบครบแล้ว — หยุดทดสอบเพื่อไม่ให้เกินงบ",
       guest_ready: "✔ สร้างภาพป้ายด้วย AI ได้ฟรีทันที ไม่ต้องสมัครสมาชิก",
       guest_limit: acc.guest && acc.guest.paused
         ? "ระบบสร้างภาพฟรีปิดชั่วคราว ระหว่างนี้ทักทีมงานทาง LINE เพื่อออกแบบป้ายได้เลย"
@@ -389,7 +393,7 @@
     statusBox.dataset.state = st;
     statusBox.hidden = !text;
     if (!state.busy) {
-      genBtn.disabled = st === "coming_soon" || st === "guest_limit";
+      genBtn.disabled = st === "coming_soon" || st === "guest_limit" || st === "test_limit";
       genLabel.textContent = genLabelFor(acc);
     }
     genBtn.title = st === "coming_soon" ? "ระบบกำลังเตรียมเปิดบริการ" : "";
@@ -401,6 +405,12 @@
     const acc = window.SVAccount.state;
     const q = acc.quota;
     const el = $("aiQuota");
+    if (!acc.user && isTestMode(acc) && acc.aiTest) {
+      const t = acc.aiTest;
+      el.hidden = false;
+      el.textContent = `โหมดทดสอบ · ใช้ไปประมาณ ฿${Number(t.spentThb || 0).toLocaleString("th-TH")} จาก ฿${t.budgetThb} · เหลือ ${t.remainingJobs} งาน`;
+      return;
+    }
     if (!acc.user && acc.aiStatus === "guest_ready" && acc.guest) {
       el.hidden = false;
       el.textContent = `ฟรี ไม่ต้องสมัครสมาชิก · วันนี้สร้างได้อีก ${acc.guest.remainingToday} ครั้ง`;
@@ -465,9 +475,14 @@
       const r = await api("/api/ai", { action: "step", jobId: current.jobId, step });
       current = r.job;
       if (r.quota) window.SVAccount.state.quota = r.quota;
+      if (r.test) window.SVAccount.state.aiTest = { ...window.SVAccount.state.aiTest, ...r.test };
       renderQuota();
       showJob(current);
-      if (current[step].status !== "done") throw Object.assign(new Error(step === "artwork" ? "สร้าง Artwork ไม่สำเร็จ" : "สร้าง Mockup ไม่สำเร็จ"), { code: current.errorCode });
+      if (current[step].status !== "done") {
+        // โหมดทดสอบ: แสดงรหัสข้อผิดพลาดจริงจากผู้ให้บริการ (ไม่มีข้อมูลลับ) เพื่อช่วยตรวจสอบ
+        const detail = isTestMode(window.SVAccount.state) && String(current.errorCode || "").includes(":") ? ` (รายละเอียด: ${String(current.errorCode).split(":").slice(1).join(" · ")})` : "";
+        throw Object.assign(new Error((step === "artwork" ? "สร้าง Artwork ไม่สำเร็จ" : "สร้าง Mockup ไม่สำเร็จ") + detail), { code: current.errorCode });
+      }
     }
     setStep("done");
     return current;
@@ -485,7 +500,7 @@
     const guest = !acc.user && isGuestMode(acc);          // โหมด Guest: ไม่ต้องล็อกอิน (Server ตรวจสิทธิ์อีกชั้น)
     if (!acc.user && !guest) { await savePending(); window.SVAccount.openLogin(); return; }
     renderStatus(acc);
-    if (acc.aiStatus === "guest_limit") return;
+    if (acc.aiStatus === "guest_limit" || acc.aiStatus === "test_limit") return;
     if (!acc.aiAvailable) { showNotice("ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ ยังไม่มีการอัปโหลดรูปหรือใช้สิทธิ์ของคุณ ระหว่างนี้ทักทีมงานทาง LINE ได้เลย"); return; }
     if (state.job && ["partial", "processing"].includes(state.job.status)) return resume();   // ทำภาพที่เหลือต่อ ไม่ใช้สิทธิ์ใหม่
     if (!guest && acc.quota && acc.quota.remaining <= 0) { window.SVAccount.openModal("quotaModal"); return; }
@@ -514,6 +529,7 @@
       state.job = created.job;
       if (created.quota) window.SVAccount.state.quota = created.quota;
       if (created.guest) window.SVAccount.state.guest = { ...window.SVAccount.state.guest, ...created.guest };
+      if (created.test) window.SVAccount.state.aiTest = { ...window.SVAccount.state.aiTest, ...created.test };
       renderQuota();
       state.job = await runSteps(created.job);
       sessionStorage.removeItem("sv_ai_idem");
@@ -521,7 +537,7 @@
       setStep(null);
       if (err.code === "quota_exhausted") { window.SVAccount.openModal("quotaModal"); }
       else if (err.code === "unauthenticated" && !guest) { await savePending(); window.SVAccount.openLogin(); }
-      else if (["guest_limit", "guest_daily_full", "guest_paused"].includes(err.code)) { showError(err.message); window.SVAccount.refresh(); }
+      else if (["guest_limit", "guest_daily_full", "guest_paused", "ai_test_budget", "ai_test_limit"].includes(err.code)) { showError(err.message); window.SVAccount.refresh(); }
       else showError(err.message);
       if (window.turnstile && turnstileReady) turnstileReady.then((w) => w != null && window.turnstile.reset(w));
     } finally {
@@ -744,10 +760,45 @@
     else showNotice("ยังไม่มีแบบที่สร้างสำเร็จในบัญชีนี้");
   });
 
+  // ---------- โหมดทดสอบ AI ของเจ้าของเว็บ (เปิดหน้าด้วย ?aitest) ----------
+  const wantsTest = /[?&#]aitest\b/.test(location.href);
+  function renderTestBox(acc) {
+    const t = acc.aiTest;
+    const box = $("aiTestBox");
+    box.hidden = acc.user || !t || !t.enabled || !(t.active || wantsTest);
+    if (box.hidden) return;
+    $("aiTestForm").hidden = Boolean(t.active);
+    $("aiTestActive").hidden = !t.active;
+    const err = $("aiTestError");
+    if (t.active && t.error === "db_migration_required") {
+      err.textContent = "ฐานข้อมูลยังไม่ได้อัปเดต — ต้องรัน db/schema.sql ใน Neon ก่อนจึงจะทดสอบได้";
+      err.hidden = false;
+    }
+  }
+  $("aiTestForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = $("aiTestError");
+    err.hidden = true;
+    const code = $("aiTestCode").value;
+    $("aiTestCode").value = "";
+    if (!code) return;
+    try {
+      await api("/api/ai", { action: "testLogin", code });
+      await window.SVAccount.refresh();
+    } catch (ex) {
+      err.textContent = ex.message;
+      err.hidden = false;
+    }
+  });
+  $("aiTestLogout").addEventListener("click", async () => {
+    try { await api("/api/ai", { action: "testLogout" }); } finally { await window.SVAccount.refresh(); }
+  });
+
   // ---------- เริ่มต้น ----------
   window.SVAccount.onChange(async (acc) => {
     // แสดงส่วน AI เสมอ — ปุ่มและข้อความทำงานตามสถานะจาก Server
     renderStatus(acc);
+    renderTestBox(acc);
     renderRestoredNotice(acc);
     // ปุ่มสั่งผลิตผ่าน LINE: แสดงเฉพาะเมื่อเปิดให้บัญชีนี้ใช้ (ช่วงทดสอบ = เฉพาะพนักงาน) · ไม่งั้นแสดงปุ่มติดต่อร้านทาง LINE
     $("aiOrder").hidden = !acc.lineOrders;
