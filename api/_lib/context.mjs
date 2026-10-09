@@ -5,7 +5,8 @@ import { HttpError, allowedOrigins } from "./http.mjs";
 import { createMemoryRepo } from "./repo-memory.mjs";
 import { createMemoryStorage, createVercelStorage, resolveBlobConfig } from "./storage.mjs";
 import { createMockProvider } from "./ai-mock.mjs";
-import { enabledProviders, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
+import { enabledLoginMethods, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
+import { phoneLoginConfig, createOtpService } from "./phone.mjs";
 import { createLineClient } from "./line.mjs";
 
 const int = (v, d) => {
@@ -51,7 +52,8 @@ export async function getContext(env = process.env) {
       liffId: env.LIFF_ID || "",                          // เปิดเผยได้ (ใช้ฝั่งหน้า LIFF)
       liffChannelId: env.LINE_LOGIN_CHANNEL_ID || "",     // ใช้ตรวจ LIFF ID token ฝั่ง Server
     },
-    providers: mock ? ["google", "line", "facebook"] : enabledProviders(env),
+    // วิธีเข้าสู่ระบบที่แสดงบนหน้าเว็บ: "line" | "phone" (Google/Facebook ปิดไว้ — เปิดได้ด้วย AUTH_PROVIDERS)
+    providers: enabledLoginMethods(env, { mock }),
     repo: null,
     storage: null,
     ai: null,
@@ -62,6 +64,12 @@ export async function getContext(env = process.env) {
     ctx.storage = createMemoryStorage({ uuid: newId });
     ctx.ai = createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" });
     ctx.aiMockStaffOnly = env.MOCK_AI_STAFF_ONLY === "1";   // จำลองเว็บจริงที่ตั้ง AI_PROVIDER=mock (ทดสอบในเครื่อง)
+    // เบอร์โทร + OTP แบบจำลอง (SMS ไม่ถูกส่งจริง) — ระบบจริงทำงานผ่าน Better Auth phoneNumber plugin ใน auth.mjs
+    const phoneCfg = phoneLoginConfig(env, { mock: true });
+    if (phoneCfg.ready) {
+      ctx.sms = phoneCfg.sms;
+      ctx.phone = createOtpService({ repo: ctx.repo, sms: phoneCfg.sms, secret: phoneCfg.secret, uuid: newId, limits: phoneCfg.limits });
+    }
     ctx.getSession = async (req) => {
       const m = /(?:^|;\s*)sv_mock_user=([A-Za-z0-9_-]+)/.exec(req.headers.cookie || "");
       return m ? ctx.repo.getUser(m[1]) : null;

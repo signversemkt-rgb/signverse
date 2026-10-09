@@ -16,7 +16,7 @@
     kids.flat().forEach((c) => n.append(c instanceof Node ? c : document.createTextNode(String(c ?? ""))));
     return n;
   };
-  const PROVIDER_LABELS = { google: "เข้าสู่ระบบด้วย Google", line: "เข้าสู่ระบบด้วย LINE", facebook: "เข้าสู่ระบบด้วย Facebook" };
+  const PROVIDER_LABELS = { line: "เข้าสู่ระบบด้วย LINE", phone: "เข้าสู่ระบบด้วยเบอร์โทรศัพท์", facebook: "เข้าสู่ระบบด้วย Facebook" };
   const fmtDate = (d) => (d ? new Date(d).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" }) : "-");
 
   let me = null;
@@ -81,7 +81,10 @@
       ["staff", "admin"].forEach((role) => box.append(el("button", { class: "btn btn--primary", type: "button", onclick: () => mockLogin(role) }, `เข้าสู่ระบบทดสอบ (${role})`)));
       return;
     }
-    (data.providers || []).forEach((p) => box.append(el("button", { class: "btn btn--primary", type: "button", onclick: () => signIn(p) }, PROVIDER_LABELS[p] || p)));
+    // เบอร์โทร + OTP ทำที่หน้าหลัก (Session เดียวกัน) แล้วกลับมาหน้านี้
+    (data.providers || []).forEach((p) => box.append(p === "phone"
+      ? el("a", { class: "btn btn--primary", href: "/#login" }, PROVIDER_LABELS.phone)
+      : el("button", { class: "btn btn--primary", type: "button", onclick: () => signIn(p) }, PROVIDER_LABELS[p] || p)));
     if (!(data.providers || []).length) $("gateText").textContent = "ระบบเข้าสู่ระบบยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์";
   }
   async function mockLogin(role) {

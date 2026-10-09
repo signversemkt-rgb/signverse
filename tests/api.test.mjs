@@ -63,7 +63,7 @@ test("ผู้ใช้ทั่วไป: ดูสถานะได้ แ�
   const r = await call(me);
   assert.equal(r.status, 200);
   assert.equal(r.json.user, null);
-  assert.deepEqual(r.json.providers, ["google", "line", "facebook"]);
+  assert.deepEqual(r.json.providers, ["line", "phone"]);          // Google ปิด · เข้าสู่ระบบด้วย LINE หรือเบอร์โทร
   const c = await call(ai, { method: "POST", url: "/api/ai", body: { action: "create", idempotencyKey: idem(), input: INPUT } });
   assert.equal(c.status, 401);
   const u = await call(upload, { method: "POST", url: "/api/upload", body: { kind: "storefront", data: png() } });

@@ -1,4 +1,4 @@
-// Vercel Cron (วันละครั้ง): ลบไฟล์ลูกค้า/ภาพ AI ที่เกินระยะเก็บรักษา และรูปในถังขยะที่เกินกำหนด
+// Vercel Cron (วันละครั้ง): ลบไฟล์ลูกค้า/ภาพ AI ที่เกินระยะเก็บรักษา รูปในถังขยะที่เกินกำหนด และคำขอ OTP เก่า
 // ป้องกันด้วย CRON_SECRET (Vercel ส่ง Authorization: Bearer <CRON_SECRET>)
 import { route } from "./_lib/route.mjs";
 import { sendJson, HttpError } from "./_lib/http.mjs";
@@ -29,6 +29,8 @@ export default route(async (req, res, ctx) => {
     await ctx.repo.purgeImage(img.image_id);
     out.trash++;
   }
+  // คำขอ OTP (มีแต่ hash) เก็บไว้ 7 วันเพื่อใช้นับเพดานการส่ง แล้วลบทิ้ง
+  await ctx.repo.deleteOtpRequestsBefore(new Date(now - 7 * 86400000).toISOString());
   await ctx.repo.audit(null, "cleanup_run", null, out);
   sendJson(res, 200, out);
 });

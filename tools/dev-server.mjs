@@ -43,7 +43,9 @@ http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   if (url.pathname.startsWith("/api/")) {
     const name = url.pathname.slice(5).replace(/\/$/, "");
-    const h = /^[a-z-]+(\/[a-z-]+)?$/.test(name) && !name.startsWith("_") ? await loadHandler(name) : null;
+    // /api/auth/* → api/auth/[...all].mjs (catch-all เหมือน Vercel)
+    const h = name.startsWith("auth/") ? await loadHandler("auth/[...all]")
+      : /^[a-z-]+(\/[a-z-]+)?$/.test(name) && !name.startsWith("_") ? await loadHandler(name) : null;
     if (!h) { res.statusCode = name.startsWith("auth") ? 503 : 404; return res.end(JSON.stringify({ error: "not available in mock dev server" })); }
     const chunks = [];
     for await (const c of req) chunks.push(c);

@@ -82,7 +82,9 @@ Breakpoints: `640px`, `960px` (min-width)
 - เปลี่ยนขนาด/วัสดุหลังได้ผล → เรียกเฉพาะ estimate-price ไม่เรียก AI ซ้ำ
 
 ## ระบบสมาชิก / โควตา AI / หลังบ้าน (ดู docs/SETUP.md)
-- Auth: **Better Auth** (`api/_lib/auth.mjs`, `api/auth/[...all].mjs`) — Google/LINE/Facebook, ไม่มีรหัสผ่าน, role: customer/staff/admin (`input:false`)
+- Auth: **Better Auth** (`api/_lib/auth.mjs`, `api/auth/[...all].mjs`) — **LINE Login + เบอร์โทร/OTP** (`AUTH_PROVIDERS`, ค่าเริ่มต้น `line,phone`; Google/Facebook ปิด), ไม่มีรหัสผ่าน, role: customer/staff/admin (`input:false`), `disableImplicitLinking` (ไม่รวมบัญชีอัตโนมัติ)
+  - LINE Login ใช้ `LINE_LOGIN_CHANNEL_ID/SECRET` — ห้ามใช้ `LINE_CHANNEL_SECRET` (ของ OA Webhook)
+  - OTP: Better Auth `phoneNumber` plugin + `api/_lib/phone.mjs` (hash, 5 นาที, ผิดได้ 5 ครั้ง, ส่งซ้ำ 60 วิ, จำกัดต่อเบอร์/IP/วัน) · SMS: ThaiBulkSMS (`SMS_PROVIDER`) · SMS จำลองใช้ได้เฉพาะ `MOCK_SERVICES=1` (`MOCK_SMS_ECHO=1` แสดงรหัสใน console) · ต้องรัน `db/schema.sql` ก่อนตั้งค่า SMS · แก้ต้องรัน `tests/phone-otp.test.mjs`
 - DB: Neon (`db/schema.sql`), repo: `api/_lib/repo-pg.mjs` (จริง) / `repo-memory.mjs` (mock+tests) อินเทอร์เฟซเดียวกัน
 - Storage: Blob Private (ภาพลูกค้า/AI/ต้นฉบับผลงาน) + Public (เฉพาะผลงานที่เผยแพร่) — `api/_lib/storage.mjs`; อ่าน private ผ่าน `/api/files` ที่ตรวจสิทธิ์เท่านั้น
   - เลือก store ด้วย `PRIVATE_BLOB_STORE_ID` / `PUBLIC_BLOB_STORE_ID` + Vercel OIDC (หรือ `*_BLOB_READ_WRITE_TOKEN` ถ้ามี ใช้ก่อน) · ส่ง storeId ทุกคำสั่ง + ตรวจ host ของ URL ไฟล์ · ห้ามพึ่ง `BLOB_READ_WRITE_TOKEN`/`BLOB_STORE_ID` ค่าเริ่มต้น · แก้ต้องรัน `tests/storage.test.mjs`

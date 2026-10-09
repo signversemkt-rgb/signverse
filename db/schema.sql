@@ -11,6 +11,8 @@ CREATE TABLE IF NOT EXISTS "user" (
   "image"         text,
   "role"          text NOT NULL DEFAULT 'customer' CHECK ("role" IN ('customer', 'staff', 'admin')),
   "accountStatus" text NOT NULL DEFAULT 'active' CHECK ("accountStatus" IN ('active', 'suspended')),
+  "phoneNumber"   text UNIQUE,                           -- E.164 (+66…) เฉพาะสมาชิกที่ยืนยัน OTP แล้ว (Better Auth phoneNumber plugin)
+  "phoneNumberVerified" boolean,
   "createdAt"     timestamptz NOT NULL DEFAULT now(),
   "updatedAt"     timestamptz NOT NULL DEFAULT now()
 );
@@ -229,3 +231,22 @@ CREATE INDEX IF NOT EXISTS production_orders_status_idx ON production_orders(sta
 ALTER TABLE ai_jobs DROP CONSTRAINT IF EXISTS ai_jobs_credit_state_check;
 ALTER TABLE ai_jobs ADD CONSTRAINT ai_jobs_credit_state_check CHECK (credit_state IN ('reserved', 'consumed', 'refunded', 'exempt'));
 ALTER TABLE production_orders ADD COLUMN IF NOT EXISTS line_request_id text;
+
+-- ========== เข้าสู่ระบบด้วยเบอร์โทร + OTP (เพิ่มเท่านั้น ไม่แก้ข้อมูลเดิม · รันซ้ำได้) ==========
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "phoneNumber" text;
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "phoneNumberVerified" boolean;
+CREATE UNIQUE INDEX IF NOT EXISTS user_phone_number_key ON "user"("phoneNumber");
+
+-- คำขอ OTP: เก็บเฉพาะ hash (ไม่มีเบอร์เต็ม / ไม่มีรหัส OTP) · ลบอัตโนมัติด้วย cron หลัง 7 วัน
+CREATE TABLE IF NOT EXISTS phone_otp_requests (
+  request_id  text PRIMARY KEY,
+  phone_hash  text NOT NULL,                 -- HMAC(OTP_HASH_SECRET, เบอร์)
+  code_hash   text NOT NULL,                 -- HMAC(OTP_HASH_SECRET, request_id + รหัส)
+  attempts    integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+  expires_at  timestamptz NOT NULL,
+  consumed_at timestamptz,                   -- ใช้แล้ว / ถูกแทนด้วยรหัสใหม่ → ใช้ซ้ำไม่ได้
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  ip_hash     text
+);
+CREATE INDEX IF NOT EXISTS phone_otp_phone_idx ON phone_otp_requests(phone_hash, created_at DESC);
+CREATE INDEX IF NOT EXISTS phone_otp_created_idx ON phone_otp_requests(created_at);

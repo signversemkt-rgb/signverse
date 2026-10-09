@@ -45,6 +45,7 @@
           <li><a href="#reviews" class="nav__link">รีวิว</a></li>
           <li><a href="#faq" class="nav__link">คำถามที่พบบ่อย</a></li>
         </ul>
+        <span class="nav__user" id="authUser" hidden></span>
         <button type="button" class="nav__login" id="authBtn">เข้าสู่ระบบ</button>
         <a href="#" class="btn btn--line btn--sm js-line-link nav__cta" target="_blank" rel="noopener">
           <svg class="icon"><use href="#i-line"/></svg> แอดไลน์
@@ -763,7 +764,7 @@
       </div>
     </div>
     <div class="container footer__bottom">
-      <p>© <span id="year">2026</span> SIGN VERSE. สงวนลิขสิทธิ์</p>
+      <p>© <span id="year">2026</span> SIGN VERSE. สงวนลิขสิทธิ์ · <a href="privacy.html">นโยบายความเป็นส่วนตัว</a></p>
     </div>
   </footer>
 
@@ -785,12 +786,40 @@
     <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
       <button type="button" class="modal__close" data-close aria-label="ปิด">×</button>
       <img src="assets/images/logo-3d.png" alt="" class="modal__logo" width="354" height="400">
-      <h2 class="modal__title" id="loginTitle">เริ่มออกแบบป้ายของคุณด้วย AI</h2>
-      <p class="modal__text">สมัครสมาชิกหรือเข้าสู่ระบบ เพื่อทดลองสร้าง Artwork และภาพจำลองหน้าร้านฟรี 1 ครั้ง</p>
-      <div class="modal__providers" id="loginProviders"></div>
-      <p class="modal__pending" id="loginPending" hidden>ระบบเข้าสู่ระบบกำลังรอเปิดใช้งาน ระหว่างนี้ทักทีมงานทาง LINE ได้เลย</p>
+      <h2 class="modal__title" id="loginTitle">สมัครสมาชิก / เข้าสู่ระบบ SIGNVERSE</h2>
+      <p class="modal__text">เข้าสู่ระบบเพื่อออกแบบป้ายและจัดการงานของคุณ</p>
+
+      <!-- เลือกวิธี: LINE / เบอร์โทรศัพท์ (ปุ่มสร้างจากวิธีที่ Server เปิดใช้จริง) -->
+      <div id="loginChoose">
+        <div class="modal__providers" id="loginProviders"></div>
+        <p class="modal__pending" id="loginPending" hidden>ระบบเข้าสู่ระบบกำลังรอเปิดใช้งาน ระหว่างนี้ทักทีมงานทาง LINE ได้เลย</p>
+      </div>
+
+      <!-- เบอร์โทรศัพท์ + OTP -->
+      <form class="otp" id="phoneForm" hidden novalidate>
+        <div class="otp__step" id="phoneStep">
+          <label class="otp__label" for="phoneInput">เบอร์มือถือ</label>
+          <input class="otp__input" id="phoneInput" name="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="08x-xxx-xxxx" maxlength="13">
+          <p class="otp__hint">ระบบจะส่งรหัส OTP 6 หลักทาง SMS ไปยังเบอร์นี้</p>
+          <div class="otp__turnstile" id="otpTurnstile" hidden></div>
+          <button type="submit" class="btn btn--primary btn--lg otp__btn" id="otpSend">ส่งรหัส OTP</button>
+        </div>
+        <div class="otp__step" id="codeStep" hidden>
+          <p class="otp__sent" id="otpSentTo"></p>
+          <label class="otp__label" for="otpInput">รหัส OTP 6 หลัก</label>
+          <input class="otp__input otp__input--code" id="otpInput" name="code" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="••••••">
+          <button type="submit" class="btn btn--primary btn--lg otp__btn" id="otpVerify">ยืนยันและเข้าสู่ระบบ</button>
+          <div class="otp__row">
+            <button type="button" class="otp__link" id="otpResend" disabled>ขอรหัสใหม่</button>
+            <button type="button" class="otp__link" id="otpChange">เปลี่ยนเบอร์</button>
+          </div>
+        </div>
+        <button type="button" class="modal__back" id="phoneBack">← เลือกวิธีเข้าสู่ระบบอื่น</button>
+      </form>
+
       <p class="brief__error" id="loginError" role="alert" hidden></p>
-      <p class="modal__foot">กรอกข้อมูลและประเมินราคาเบื้องต้นได้ฟรี โดยไม่ต้องสมัครสมาชิก</p>
+      <p class="modal__foot">สมาชิกใหม่สามารถสมัครได้ทันที ไม่มีค่าใช้จ่าย</p>
+      <p class="modal__privacy">การเข้าสู่ระบบถือว่าคุณยอมรับ<a href="privacy.html" target="_blank" rel="noopener">นโยบายความเป็นส่วนตัว</a> — เราใช้บัญชี LINE หรือเบอร์โทรศัพท์เพื่อยืนยันตัวตนและติดต่อเรื่องงานของคุณเท่านั้น</p>
       <button type="button" class="modal__back" data-close>กลับไปกรอกข้อมูล</button>
     </div>
   </div>

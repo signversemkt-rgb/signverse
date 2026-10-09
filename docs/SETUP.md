@@ -43,32 +43,52 @@
 | `BETTER_AUTH_URL` | `https://signverse-azure.vercel.app` (ไม่มี `/` ท้าย) |
 | `APP_ORIGIN` | ค่าเดียวกับ `BETTER_AUTH_URL` |
 
-## 4. Google Login
+## 4. Google Login (ปิดอยู่)
 
-1. เปิด [Google Cloud Console](https://console.cloud.google.com/) → สร้างโปรเจกต์ใหม่ เช่น `SIGN VERSE`
-2. **Google Auth Platform** (หรือ APIs & Services → OAuth consent screen)
-   - **Branding**: ชื่อแอป `SIGN VERSE`, อีเมลติดต่อ, โลโก้, ลิงก์นโยบายความเป็นส่วนตัว, โดเมน `signverse-azure.vercel.app`
-   - **Audience**: User type **External**
-   - **Data access**: ใช้เฉพาะ `openid`, `email`, `profile`
-3. **Clients** → **Create client** → Application type **Web application**
-   - Authorized JavaScript origins: `https://signverse-azure.vercel.app`
-   - Authorized redirect URIs: `https://signverse-azure.vercel.app/api/auth/callback/google`
-4. คัดลอก **Client ID** และ **Client secret** → ใส่ใน Vercel
-   - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-5. Audience → **Publish app** (ถ้ายังเป็น Testing จะล็อกอินได้เฉพาะอีเมลที่เพิ่มเป็น Test users)
+ระบบเข้าสู่ระบบใช้ **LINE** และ **เบอร์โทรศัพท์ + OTP** เท่านั้น (ค่าเริ่มต้น `AUTH_PROVIDERS=line,phone`)
+- ปุ่ม Google ไม่แสดงบนเว็บแม้ยังมี `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` ใน Vercel (ลบออกได้)
+- บัญชีที่เคยสมัครด้วย Google ยังอยู่ในฐานข้อมูล ไม่ถูกลบ
+- เปิดคืนได้ด้วย `AUTH_PROVIDERS=line,phone,google` แล้ว Redeploy (ต้องตั้ง OAuth Client ตามเดิม: Redirect URI `https://signverse-azure.vercel.app/api/auth/callback/google`)
 
-## 5. LINE Login
+## 5. LINE Login (สมัคร / เข้าสู่ระบบด้วย LINE)
 
-1. เปิด [LINE Developers Console](https://developers.line.biz/console/) → ล็อกอินด้วยบัญชี LINE ของร้าน
-2. **Create a new provider** → ชื่อ `SIGN VERSE`
-3. ใน Provider → **Create a new channel** → เลือก **LINE Login**
-   - App types: **Web app**, ใส่ชื่อ/ไอคอน/อีเมล/ลิงก์นโยบายความเป็นส่วนตัว
-4. แท็บ **Basic settings**
-   - **Channel ID** → `LINE_CLIENT_ID`
-   - **Channel secret** → `LINE_CLIENT_SECRET`
-   - **OpenID Connect → Email address permission** → กด **Apply** (ต้องแนบนโยบายความเป็นส่วนตัวและภาพหน้าจอที่แจ้งการขออีเมล) — **จำเป็น** เพราะระบบสมาชิกใช้อีเมลเป็นข้อมูลบัญชี
-5. แท็บ **LINE Login** → Callback URL: `https://signverse-azure.vercel.app/api/auth/callback/line`
-6. เปลี่ยนสถานะ Channel จาก **Developing** เป็น **Published** (ถ้ายังเป็น Developing จะล็อกอินได้เฉพาะผู้ดูแล channel)
+> **LINE Login Channel ≠ Messaging API Channel ของ OA** — ใช้คนละ Channel ID/Secret
+> `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` เป็นของ OA (Webhook) **ห้ามนำมาใช้กับ LINE Login** และห้ามแก้
+
+1. เปิด [LINE Developers Console](https://developers.line.biz/console/) → เลือก **Provider เดียวกับ LINE OA @signverse** (สำคัญ: LINE userId จะตรงกันเฉพาะใน Provider เดียวกัน)
+2. **Create a new channel** → เลือก **LINE Login** (ถ้าสร้างไว้แล้ว ใช้ Channel เดิม)
+   - App types: **Web app** · ใส่ชื่อ ไอคอน อีเมล และลิงก์นโยบายความเป็นส่วนตัว `https://signverse-azure.vercel.app/privacy.html`
+3. แท็บ **Basic settings**
+   - **Channel ID** → Vercel `LINE_LOGIN_CHANNEL_ID`
+   - **Channel secret** → Vercel `LINE_LOGIN_CHANNEL_SECRET`
+   - (ไม่บังคับ) **OpenID Connect → Email address permission** → Apply — ถ้าไม่ได้สิทธิ์หรือลูกค้าไม่อนุญาต ระบบยังล็อกอินได้ (ใช้อีเมลแทนภายในระบบ)
+4. แท็บ **LINE Login** → **Callback URL**: `https://signverse-azure.vercel.app/api/auth/callback/line`
+5. เปลี่ยนสถานะ Channel จาก **Developing** เป็น **Published** (ถ้ายังเป็น Developing จะล็อกอินได้เฉพาะผู้ดูแล Channel)
+
+> `LINE_LOGIN_CHANNEL_ID` ใช้ร่วมกับหน้า LIFF (ตรวจ ID token) อยู่แล้ว — เป็น Channel เดียวกัน
+> ชื่อเดิม `LINE_CLIENT_ID` / `LINE_CLIENT_SECRET` ยังใช้ได้ (สำรอง)
+
+## 5.5 เข้าสู่ระบบด้วยเบอร์โทรศัพท์ + OTP (SMS)
+
+**ลำดับสำคัญ — ทำข้อ 1 ก่อนตั้งค่าตัวแปร SMS เสมอ** (เมื่อมีตัวแปร SMS ครบ ระบบจะเปิดใช้ phoneNumber plugin ซึ่งต้องมีคอลัมน์ใหม่ในตาราง `user`)
+
+1. Neon → SQL Editor → รัน `db/schema.sql` ล่าสุดอีกครั้ง (เพิ่มคอลัมน์ `phoneNumber`, `phoneNumberVerified` และตาราง `phone_otp_requests` — เพิ่มอย่างเดียว ไม่แก้ข้อมูลเดิม)
+2. สมัคร [ThaiBulkSMS](https://www.thaibulksms.com/) → ซื้อเครดิต → **ลงทะเบียนชื่อผู้ส่ง (Sender name)** และรออนุมัติ
+3. ThaiBulkSMS → ตั้งค่า → **API Key** → สร้าง Key แล้วคัดลอก Key และ Secret
+4. Vercel → Environment Variables (Production):
+
+| ตัวแปร | ค่า |
+|---|---|
+| `SMS_PROVIDER` | `thaibulksms` |
+| `THAIBULKSMS_API_KEY` / `THAIBULKSMS_API_SECRET` | จากข้อ 3 (ห้ามแชร์) |
+| `SMS_SENDER_NAME` | ชื่อผู้ส่งที่อนุมัติแล้ว |
+| `OTP_HASH_SECRET` | สุ่มใหม่ `openssl rand -base64 32` (≥ 32 ตัว ห้ามซ้ำกับ secret อื่น) |
+| `OTP_DAILY_LIMIT` | เพดาน SMS ทั้งระบบต่อวัน เช่น `200` (กันค่าใช้จ่ายผิดปกติ) |
+| `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | แนะนำ: Cloudflare Turnstile (ฟรี) กันบอทก่อนส่ง OTP |
+
+5. Redeploy → `/api/me` ต้องมี `"providers":["line","phone"]`
+
+กฎความปลอดภัยที่ระบบบังคับ: OTP 6 หลัก หมดอายุ 5 นาที · กรอกผิดได้ 5 ครั้งต่อรหัส · ขอรหัสใหม่ได้หลัง 60 วินาที · จำกัด 5 ครั้ง/ชม. และ 10 ครั้ง/วันต่อเบอร์ · 10 ครั้ง/ชม. และ 30 ครั้ง/วันต่อ IP · เพดานรวมต่อวัน · รับเฉพาะเบอร์มือถือไทย · เก็บ OTP/เบอร์/IP เป็น hash · Log ไม่มีเบอร์เต็มหรือ OTP · SMS จำลองใช้ไม่ได้บน Production
 
 ## 6. Facebook Login
 
@@ -178,11 +198,12 @@
 
 ไม่มีรหัสผ่านเริ่มต้นและไม่มีหน้าสมัคร Admin — ต้องยกสิทธิ์จากฐานข้อมูลเท่านั้น
 
-1. เปิดเว็บไซต์ → กด **เข้าสู่ระบบ** ด้วยบัญชี Google/LINE/Facebook ของเจ้าของร้าน 1 ครั้ง
-2. Neon Console → SQL Editor → รัน (เปลี่ยนอีเมลเป็นของคุณ):
+1. เปิดเว็บไซต์ → กด **เข้าสู่ระบบ** ด้วย LINE หรือเบอร์โทรศัพท์ของเจ้าของร้าน 1 ครั้ง
+2. Neon Console → SQL Editor → หาบัญชีของคุณ แล้วยกสิทธิ์ด้วย `id` (บัญชีเบอร์โทร/LINE อาจใช้อีเมลแทนภายในระบบ จึงไม่ควรค้นด้วยอีเมล):
    ```sql
-   SELECT "id", "name", "email", "role" FROM "user" ORDER BY "createdAt" DESC LIMIT 5;
-   UPDATE "user" SET "role" = 'admin' WHERE "email" = 'อีเมลของคุณ';
+   -- บัญชีเบอร์โทร: ค้นด้วยเบอร์แบบ +66 (เช่น 081-234-5678 → +66812345678) · บัญชี LINE: ดูจากชื่อ LINE
+   SELECT "id", "name", "phoneNumber", "role", "createdAt" FROM "user" ORDER BY "createdAt" DESC LIMIT 5;
+   UPDATE "user" SET "role" = 'admin' WHERE "id" = 'id ของคุณจากคำสั่งด้านบน';
    ```
 3. เปิด `https://signverse-azure.vercel.app/admin/` → จะเห็นหลังบ้าน
 4. ให้พนักงานล็อกอินที่เว็บ 1 ครั้ง แล้ว Admin ไปที่ **จัดการสิทธิ์ AI** → ค้นหาพนักงาน → เปลี่ยนสิทธิ์เป็น `staff`
@@ -221,7 +242,8 @@ ELECTRON_RUN_AS_NODE=1 "/Applications/Cursor.app/Contents/MacOS/Cursor" tools/de
 |---|---|---|
 | Neon | 1 GB, 100 CU-ชม./เดือน | ฐานข้อมูลหยุดจนรอบถัดไป หรืออัปเกรด Launch (จ่ายตามใช้) |
 | Vercel Blob (Hobby) | 1 GB, รับส่งข้อมูล 10 GB/เดือน | Blob ใช้งานไม่ได้ 30 วัน (ไม่เก็บเงิน) · Pro คิดตามใช้ |
-| Better Auth / Google / LINE / Facebook Login | ฟรี | — |
+| Better Auth / LINE Login | ฟรี | — |
+| SMS OTP (ThaiBulkSMS) | ประมาณ 0.15–0.48 บาท/SMS ตามแพ็กเกจ | ซื้อเครดิตล่วงหน้า · ตั้ง `OTP_DAILY_LIMIT` กันค่าใช้จ่ายผิดปกติ |
 | Vercel Cron | 1 งาน/วัน (ฟรีบน Hobby) | — |
 | AI สร้างภาพ (เมื่อเปิดจริง) | — | ประมาณ 4–9 บาท/ชุด × จำนวนผู้ใช้สิทธิ์ (จำกัดด้วย `AI_DAILY_JOB_LIMIT`) |
 | Vercel Hobby | ใช้ได้เฉพาะงานส่วนตัว/ไม่ใช่เชิงพาณิชย์ | เว็บธุรกิจควรใช้ Pro $20/เดือน |

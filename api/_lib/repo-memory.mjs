@@ -16,6 +16,7 @@ export function createMemoryRepo({ uuid }) {
     lineGroups: new Map(),
     lineOrders: [],
     orders: new Map(),
+    otp: new Map(),        // request_id → { phone_hash, code_hash, attempts, expires_at, consumed_at, created_at }
   };
   let chain = Promise.resolve();
   const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
@@ -220,6 +221,31 @@ export function createMemoryRepo({ uuid }) {
         .sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit));
     },
     async findUserIdByLineId(lineUserId) { const i = db.identities.find((x) => x.providerId === "line" && x.accountId === lineUserId); return i ? i.userId : null; },
+
+    // ---------- OTP เข้าสู่ระบบด้วยเบอร์โทร ----------
+    async createOtpRequest(r) { db.otp.set(r.request_id, clone(r)); },
+    async latestOtpRequest(phoneHash) {
+      const rows = [...db.otp.values()].filter((r) => r.phone_hash === phoneHash).sort((a, b) => b.created_at.localeCompare(a.created_at));
+      return clone(rows[0] || null);
+    },
+    async supersedeOtpRequests(phoneHash, at) { for (const r of db.otp.values()) if (r.phone_hash === phoneHash && !r.consumed_at) r.consumed_at = at; },
+    async countOtpSince(since) { return [...db.otp.values()].filter((r) => r.created_at >= since).length; },
+    async deleteOtpRequest(id) { db.otp.delete(id); },
+    async bumpOtpAttempt(id, maxAttempts, at) {
+      const r = db.otp.get(id);
+      if (!r || r.consumed_at || r.expires_at <= at || r.attempts >= maxAttempts) return null;
+      r.attempts += 1;
+      return clone(r);
+    },
+    async consumeOtpRequest(id, at) {
+      const r = db.otp.get(id);
+      if (!r || r.consumed_at) return false;
+      r.consumed_at = at;
+      return true;
+    },
+    async deleteOtpRequestsBefore(date) { for (const [k, r] of db.otp) if (r.created_at < date) db.otp.delete(k); },
+    // (Mock) ผู้ใช้ที่เข้าสู่ระบบด้วยเบอร์โทร — ในระบบจริง Better Auth จัดการตาราง user เอง
+    async findUserByPhone(phone) { for (const u of db.users.values()) if (u.phoneNumber === phone) return clone(u); return null; },
 
     // ---------- rate limit ----------
     async hitRateLimit(key, limit, windowSec, now = Date.now()) {

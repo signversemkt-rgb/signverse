@@ -226,6 +226,29 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
       await q(`UPDATE production_orders SET ${s.sql} WHERE order_id = $1`, [id, ...s.values]);
     },
 
+    // ---------- OTP เข้าสู่ระบบด้วยเบอร์โทร (เก็บเฉพาะ hash) ----------
+    async createOtpRequest(r) {
+      await q(`INSERT INTO phone_otp_requests (request_id, phone_hash, code_hash, attempts, expires_at, consumed_at, created_at, ip_hash)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [r.request_id, r.phone_hash, r.code_hash, r.attempts, r.expires_at, r.consumed_at, r.created_at, r.ip_hash]);
+    },
+    async latestOtpRequest(phoneHash) {
+      return (await q(`SELECT * FROM phone_otp_requests WHERE phone_hash = $1 ORDER BY created_at DESC LIMIT 1`, [phoneHash]))[0] || null;
+    },
+    async supersedeOtpRequests(phoneHash, at) {
+      await q(`UPDATE phone_otp_requests SET consumed_at = $2 WHERE phone_hash = $1 AND consumed_at IS NULL`, [phoneHash, at]);
+    },
+    async countOtpSince(since) { return Number((await q(`SELECT count(*) FROM phone_otp_requests WHERE created_at >= $1`, [since]))[0].count); },
+    async deleteOtpRequest(id) { await q(`DELETE FROM phone_otp_requests WHERE request_id = $1`, [id]); },
+    // นับครั้งที่กรอกแบบ atomic: ได้แถวกลับมาเฉพาะเมื่อยังไม่ใช้ ยังไม่หมดอายุ และยังไม่ครบจำนวนครั้ง
+    async bumpOtpAttempt(id, maxAttempts, at) {
+      return (await q(`UPDATE phone_otp_requests SET attempts = attempts + 1
+        WHERE request_id = $1 AND consumed_at IS NULL AND expires_at > $3 AND attempts < $2 RETURNING *`, [id, maxAttempts, at]))[0] || null;
+    },
+    async consumeOtpRequest(id, at) {
+      return (await q(`UPDATE phone_otp_requests SET consumed_at = $2 WHERE request_id = $1 AND consumed_at IS NULL RETURNING request_id`, [id, at])).length > 0;
+    },
+    async deleteOtpRequestsBefore(date) { await q(`DELETE FROM phone_otp_requests WHERE created_at < $1`, [date]); },
+
     // ---------- rate limit (แชร์ระหว่าง instances) ----------
     async hitRateLimit(key, limit, windowSec) {
       const row = (await q(`INSERT INTO app_rate_limits (key, window_start, count) VALUES ($1, now(), 1)
