@@ -184,6 +184,55 @@
     qualityText.textContent = estimated && quote.uvPrint ? QUALITY_UV : QUALITY_BASE;
   };
 
+  // จำผลราคาของสเปกที่เคยถามแล้ว → เปลี่ยนกลับไปมาไม่ต้องเรียก Server ซ้ำ (Server ยังเป็นผู้คำนวณเสมอ)
+  const quoteCache = new Map();
+  const fetchQuote = async (d) => {
+    const payload = toPricePayload(d);
+    const key = JSON.stringify(payload);
+    if (!quoteCache.has(key)) {
+      const p = postJSON("/api/estimate-price", payload);
+      quoteCache.set(key, p);
+      p.catch(() => quoteCache.delete(key));
+    }
+    return quoteCache.get(key);
+  };
+
+  // ---------- ราคาประเมินทันที (ใต้ช่องขนาด/วัสดุ/ชั้น/ไฟ) — ไม่ต้องกดปุ่ม และไม่เรียก AI ----------
+  const liveValue = $("livePriceValue");
+  const liveNote = $("livePriceNote");
+  const liveBox = $("livePrice");
+  let liveSeq = 0;
+  const renderLive = (state, text, note = "") => {
+    liveBox.dataset.state = state;
+    liveValue.textContent = text;
+    liveNote.textContent = note;
+  };
+  const updateLive = async () => {
+    const d = read();
+    const seq = ++liveSeq;
+    if (!hasSize(d)) return renderLive("empty", "กรอกความกว้างและความสูงเพื่อดูราคา");
+    renderLive("loading", "กำลังคำนวณ…");
+    try {
+      const q = await fetchQuote(d);
+      if (seq !== liveSeq) return;
+      if (q && q.status === "estimated" && Number(q.price) > 0) {
+        renderLive("estimated", formatPrice(q.price), q.note || "ราคาประเมินอาจเปลี่ยนแปลงตามรายละเอียดงานจริง • ยังไม่รวมค่าจัดส่ง");
+      } else {
+        renderLive("review", "ทีมงานจะประเมินราคาให้", "งานรูปแบบนี้ต้องประเมินเพิ่มเติม — ทักไลน์ส่งรายละเอียดได้เลย");
+      }
+    } catch (err) {
+      if (seq === liveSeq) renderLive("error", "ยังคำนวณราคาไม่ได้", `${err.message}`);
+    }
+  };
+  let liveTimer;
+  const scheduleLive = (e) => {
+    if (e && !e.target.hasAttribute("data-price")) return;
+    clearTimeout(liveTimer);
+    liveTimer = setTimeout(updateLive, 400);
+  };
+  form.addEventListener("input", scheduleLive);
+  form.addEventListener("change", scheduleLive);
+
   const requestQuote = async (d) => {
     const seq = ++quoteSeq;
     if (!hasSize(d)) {
@@ -191,7 +240,7 @@
       return;
     }
     try {
-      const quote = await postJSON("/api/estimate-price", toPricePayload(d));
+      const quote = await fetchQuote(d);
       if (seq === quoteSeq) renderQuote(quote);
     } catch (err) {
       if (seq === quoteSeq) renderQuote(null, `${err.message} หรือทักไลน์ให้ทีมงานประเมินราคาให้`);
@@ -293,4 +342,6 @@
       noteEl.textContent = "คัดลอกอัตโนมัติไม่สำเร็จ กรุณาแคปหน้าจอผลสรุปแล้วส่งในแชต LINE";
     }
   });
+  // ข้อมูลที่กรอกค้างไว้ (เช่น กลับจากหน้าล็อกอิน) → แสดงราคาทันที
+  setTimeout(updateLive, 0);
 })();

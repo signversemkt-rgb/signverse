@@ -10,7 +10,7 @@ const REVIEW_MESSAGE = "งานรูปแบบนี้ต้องปร�
 
 // จำกัดคำขอแบบต่อ instance (best-effort) — การคำนวณไม่มีค่าใช้จ่ายภายนอก
 const WINDOW_MS = 5 * 60 * 1000;
-const MAX_REQUESTS = 40;
+const MAX_REQUESTS = 120;   // ราคาคำนวณทันทีเมื่อเปลี่ยนตัวเลือก (หน้าเว็บหน่วง 0.4 วิ + จำผลเดิม)
 const hits = new Map();
 
 function rateLimited(ip) {

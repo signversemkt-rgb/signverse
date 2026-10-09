@@ -380,6 +380,12 @@
                 </div>
               </fieldset>
 
+              <!-- ราคาประเมินทันที (คำนวณฝั่ง Server จากสูตรร้าน · ไม่เรียก AI · ไม่ส่งต้นทุนมาที่เบราว์เซอร์) -->
+              <div class="liveprice field--full" id="livePrice" aria-live="polite">
+                <span class="liveprice__label">ราคาประเมินเบื้องต้น</span>
+                <strong class="liveprice__value" id="livePriceValue">กรอกความกว้างและความสูงเพื่อดูราคา</strong>
+                <small class="liveprice__note" id="livePriceNote"></small>
+              </div>
 
               <p class="brief__group field--full">รายละเอียดการออกแบบ</p>
               <div class="field">
