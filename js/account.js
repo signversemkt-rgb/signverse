@@ -12,7 +12,7 @@
     facebook: "ดำเนินการต่อด้วย Facebook",
   };
 
-  const state = { loaded: false, user: null, quota: null, providers: [], aiAvailable: false, turnstileSiteKey: null, mock: false, lineOrders: false };
+  const state = { loaded: false, user: null, quota: null, providers: [], aiAvailable: false, aiStatus: "login_required", aiReady: false, turnstileSiteKey: null, mock: false, lineOrders: false };
   const listeners = [];
   const beforeLogin = [];
   let lastFocus = null;
@@ -53,12 +53,14 @@
         quota: data.quota || null,
         providers: Array.isArray(data.providers) ? data.providers : [],
         aiAvailable: Boolean(data.aiAvailable),
+        aiStatus: typeof data.aiStatus === "string" ? data.aiStatus : (data.user ? "coming_soon" : "login_required"),
+        aiReady: Boolean(data.aiReady),
         turnstileSiteKey: data.turnstileSiteKey || null,
         mock: Boolean(data.mock),
         lineOrders: Boolean(data.lineOrders),
       });
     } catch {
-      Object.assign(state, { loaded: true, user: null, quota: null, providers: [] });
+      Object.assign(state, { loaded: true, user: null, quota: null, providers: [], aiAvailable: false, aiStatus: "login_required", aiReady: false });
     }
     renderHeader();
     listeners.forEach((fn) => fn(state));

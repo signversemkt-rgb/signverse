@@ -35,6 +35,9 @@
   const genBtn = $("aiGenerate");
   const genLabel = genBtn.querySelector("span");
 
+  const statusBox = $("aiStatus");
+  const GEN_LABEL = "สร้างภาพป้ายด้วย AI ฟรี";
+
   const showError = (msg) => { errBox.textContent = msg || ""; errBox.hidden = !msg; };
   const showNotice = (msg) => { notice.textContent = msg || ""; notice.hidden = !msg; };
 
@@ -304,11 +307,19 @@
       }
     } catch { filesRestored = false; }
     renderFiles();
-    showNotice(filesRestored
-      ? "ข้อมูลที่กรอกไว้ยังอยู่ครบ กด \"สร้างภาพป้ายด้วย AI ฟรี\" เพื่อเริ่มได้เลย"
-      : "ข้อมูลที่กรอกไว้ยังอยู่ แต่ระบบเก็บรูปที่อัปโหลดไว้ไม่ได้ กรุณาเลือกรูปอีกครั้ง");
+    state.restored = filesRestored ? "ok" : "no_files";
+    renderRestoredNotice(window.SVAccount.state);
     root.scrollIntoView({ behavior: "smooth", block: "start" });
     return true;
+  }
+
+  // ข้อความหลังกลับจากหน้าล็อกอิน — ไม่ชวนกดปุ่มถ้าระบบยังไม่เปิดให้ผู้ใช้นี้
+  function renderRestoredNotice(acc) {
+    if (!state.restored || !acc.loaded) return;
+    const canGo = acc.aiAvailable;
+    showNotice(state.restored === "ok"
+      ? (canGo ? "ข้อมูลที่กรอกไว้ยังอยู่ครบ กด \"สร้างภาพป้ายด้วย AI ฟรี\" เพื่อเริ่มได้เลย" : "ข้อมูลที่กรอกไว้ยังอยู่ครบ")
+      : "ข้อมูลที่กรอกไว้ยังอยู่ แต่ระบบเก็บรูปที่อัปโหลดไว้ไม่ได้ กรุณาเลือกรูปอีกครั้ง");
   }
 
   window.SVAccount.beforeLogin(savePending);
@@ -351,8 +362,30 @@
 
   function setBusy(b) {
     state.busy = b;
-    genBtn.disabled = b;
-    genLabel.textContent = b ? "กำลังสร้างภาพ…" : "สร้างภาพป้ายด้วย AI ฟรี";
+    genBtn.disabled = b || window.SVAccount.state.aiStatus === "coming_soon";
+    genLabel.textContent = b ? "กำลังสร้างภาพ…" : GEN_LABEL;
+  }
+
+  // ---------- สถานะ AI (มาจาก Server: /api/me → aiStatus) ----------
+  // ส่วนนี้แสดงเสมอ แต่ไม่สร้างภาพปลอมให้ลูกค้า และไม่อัปโหลดรูปจนกว่าระบบพร้อมและลูกค้ากดสร้างเอง
+  function renderStatus(acc) {
+    const st = acc.aiStatus || (acc.user ? "coming_soon" : "login_required");
+    const text = {
+      ready: "✔ ระบบสร้างภาพ AI พร้อมใช้งาน",
+      mock_test: "โหมดทดสอบระบบ (เฉพาะทีมงาน) — ผลลัพธ์เป็นภาพตัวอย่าง ไม่ใช่ภาพจาก AI จริง และไม่ใช้สิทธิ์ของลูกค้า",
+      login_required: acc.aiReady
+        ? "เข้าสู่ระบบด้วย Google เพื่อใช้สิทธิ์สร้างภาพป้ายฟรี 1 ครั้ง (Artwork + Mockup)"
+        : "ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ — กรอกข้อมูลและเลือกรูปไว้ก่อนได้ หรือเข้าสู่ระบบไว้รอรับสิทธิ์ฟรี 1 ครั้ง",
+      coming_soon: "ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ — ยังไม่มีการอัปโหลดรูปหรือใช้สิทธิ์ของคุณ ระหว่างนี้ทักทีมงานทาง LINE เพื่อออกแบบป้ายได้เลย",
+    }[st] || "";
+    statusBox.textContent = text;
+    statusBox.dataset.state = st;
+    statusBox.hidden = !text;
+    if (!state.busy) {
+      genBtn.disabled = st === "coming_soon";
+      genLabel.textContent = GEN_LABEL;
+    }
+    genBtn.title = st === "coming_soon" ? "ระบบกำลังเตรียมเปิดบริการ" : "";
   }
 
   function renderQuota() {
@@ -424,7 +457,8 @@
 
     const acc = await window.SVAccount.refresh();
     if (!acc.user) { await savePending(); window.SVAccount.openLogin(); return; }
-    if (!acc.aiAvailable) { showError("ระบบสร้างภาพ AI ยังไม่เปิดใช้งาน ระหว่างนี้ทักทีมงานทาง LINE ได้เลย"); return; }
+    renderStatus(acc);
+    if (!acc.aiAvailable) { showNotice("ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ ยังไม่มีการอัปโหลดรูปหรือใช้สิทธิ์ของคุณ ระหว่างนี้ทักทีมงานทาง LINE ได้เลย"); return; }
     if (state.job && ["partial", "processing"].includes(state.job.status)) return resume();   // ทำภาพที่เหลือต่อ ไม่ใช้สิทธิ์ใหม่
     if (acc.quota && acc.quota.remaining <= 0) { window.SVAccount.openModal("quotaModal"); return; }
 
@@ -534,6 +568,8 @@
     state.job = job;
     const anyDone = job.artwork.status === "done" || job.mockup.status === "done";
     $("aiResult").hidden = !anyDone;
+    // ผลจาก Mock (ทดสอบระบบ) ต้องบอกชัดว่าไม่ใช่ AI จริง
+    $("aiPreviewBadge").hidden = !job.preview;
     const retryArt = root.querySelector('[data-act="retry"][data-target="artwork"]');
     const retryMock = root.querySelector('[data-act="retry"][data-target="mockup"]');
     retryArt.hidden = !["failed", "unknown"].includes(job.artwork.status) || job.status === "failed";
@@ -680,8 +716,9 @@
 
   // ---------- เริ่มต้น ----------
   window.SVAccount.onChange(async (acc) => {
-    // ซ่อนส่วน AI จนกว่าระบบพร้อมจริง (ไม่ให้ลูกค้าเจอปุ่มที่ใช้ไม่ได้)
-    root.hidden = !acc.aiAvailable;
+    // แสดงส่วน AI เสมอ — ปุ่มและข้อความทำงานตามสถานะจาก Server
+    renderStatus(acc);
+    renderRestoredNotice(acc);
     // ปุ่มสั่งผลิตผ่าน LINE: แสดงเฉพาะเมื่อเปิดให้บัญชีนี้ใช้ (ช่วงทดสอบ = เฉพาะพนักงาน)
     $("aiOrder").hidden = !acc.lineOrders;
     renderQuota();
@@ -694,6 +731,7 @@
     }
   });
 
+  renderStatus(window.SVAccount.state);
   loadAlbums();
   restorePending();
   renderPicked();

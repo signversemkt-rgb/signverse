@@ -3,6 +3,7 @@
 import { route } from "./_lib/route.mjs";
 import { sendJson, query, readJson, HttpError, assertSameOrigin } from "./_lib/http.mjs";
 import { quotaView } from "./_lib/jobs.mjs";
+import { canUseAi, canUseLineOrders, aiStatus, aiReadyForCustomers } from "./_lib/context.mjs";
 
 export default route(async (req, res, ctx) => {
   if (req.method === "POST" && ctx.mock) {
@@ -28,10 +29,12 @@ export default route(async (req, res, ctx) => {
     user: user ? { id: user.id, name: user.name, role: user.role, image: user.image || null } : null,
     quota,
     providers: ctx.authReady ? ctx.providers : [],
-    aiAvailable: (await import("./_lib/context.mjs")).canUseAi(ctx, user),
+    aiAvailable: canUseAi(ctx, user),
+    aiStatus: aiStatus(ctx, user),
+    aiReady: aiReadyForCustomers(ctx),
     turnstileSiteKey: ctx.config.turnstileSiteKey || null,
     liffId: ctx.config.liffId || null,
-    lineOrders: (await import("./_lib/context.mjs")).canUseLineOrders(ctx, user),
+    lineOrders: canUseLineOrders(ctx, user),
     lineOaId: ctx.config.lineOaId,
     mock: ctx.mock,
   });

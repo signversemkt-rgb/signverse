@@ -109,6 +109,7 @@ export default route(async (req, res, ctx) => {
     await rateLimit(ctx, `ai:ip:${getIp(req)}`, 20, 3600);
     await verifyTurnstile(ctx, body.turnstileToken, getIp(req));
     const input = await buildInput(ctx, user, body);
+    input.provider = ctx.ai.name;                        // "mock" = ภาพตัวอย่าง (หน้าเว็บติดป้ายว่าไม่ใช่ AI จริง)
     const { job, created } = await createJob({
       repo: ctx.repo, userId: user.id, idempotencyKey: body.idempotencyKey, input,
       dailyLimit: ctx.config.dailyLimit, defaultCredits: ctx.config.defaultCredits, uuid: ctx.uuid,

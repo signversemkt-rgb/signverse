@@ -26,6 +26,7 @@ export function jobView(job) {
     artwork: { status: job.artwork_status, url: file("artwork") },
     mockup: { status: job.mockup_status, url: file("mockup") },
     errorCode: job.error_code || null,
+    preview: job.input?.provider === "mock",            // true = ภาพตัวอย่างจาก Mock ไม่ใช่ผลจาก AI จริง
     createdAt: job.created_at,
     widthCm: job.input?.widthCm ?? null,
     heightCm: job.input?.heightCm ?? null,

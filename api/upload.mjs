@@ -2,7 +2,7 @@
 // body: { kind: "reference" | "storefront", data: "<base64>" } (ย่อในเบราว์เซอร์ก่อนส่ง)
 import { route } from "./_lib/route.mjs";
 import { sendJson, readJson, HttpError, assertSameOrigin, getIp } from "./_lib/http.mjs";
-import { need, requireUser, rateLimit } from "./_lib/context.mjs";
+import { need, requireUser, rateLimit, canUseAi } from "./_lib/context.mjs";
 import { decodeImage, LIMITS } from "./_lib/images.mjs";
 
 export default route(async (req, res, ctx) => {
@@ -10,6 +10,8 @@ export default route(async (req, res, ctx) => {
   assertSameOrigin(req, ctx.config.origins);
   need(ctx, "repo", "storage");
   const user = await requireUser(ctx, req);
+  // รูปลูกค้าใช้เพื่อสร้างภาพ AI เท่านั้น → ระบบยังไม่เปิดให้ผู้ใช้นี้ = ไม่รับไฟล์ (ไม่เก็บรูปลูกค้าโดยไม่จำเป็น)
+  if (!canUseAi(ctx, user)) throw new HttpError(403, "ai_unavailable");
   await rateLimit(ctx, `upload:user:${user.id}`, 20, 3600);
   await rateLimit(ctx, `upload:ip:${getIp(req)}`, 40, 3600);
 

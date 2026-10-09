@@ -14,6 +14,8 @@
   --blue-950: #072A66;
   --cyan-400: #22D3EE;
   --amber-400: #FBBF24;
+  --amber-50: #FFF8E6;
+  --amber-900: #7A5A00;
   --red-500: #EF4444;
   --red-50: #FEF2F2;
   --line: #06C755;
@@ -1144,6 +1146,14 @@ button { font: inherit; cursor: pointer; }
 .aidesign__uploads { display: grid; gap: 4px; }
 .aidesign__notice { margin: 16px 0 0; padding: 12px 16px; border-radius: var(--radius-sm); background: var(--blue-50); color: var(--blue-900); }
 .aidesign__go { width: 100%; margin-top: 20px; }
+.aidesign__go:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+.aidesign__privacy { margin: 12px 0 0; color: var(--ink-soft); font-size: .88rem; }
+/* สถานะระบบ AI (มาจาก Server) */
+.aistatus { margin: 0 0 20px; padding: 12px 16px; border-radius: var(--radius-sm); border-left: 4px solid var(--blue-600); background: var(--blue-50); color: var(--blue-900); font-size: .95rem; }
+.aistatus[data-state="coming_soon"] { border-left-color: var(--amber-400); background: var(--amber-50); color: var(--amber-900); }
+.aistatus[data-state="mock_test"] { border-left-color: var(--amber-400); background: var(--amber-50); color: var(--amber-900); font-weight: 600; }
+.aistatus[data-state="ready"] { border-left-color: var(--line); }
+.airesult__preview { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--amber-50); color: var(--amber-900); border: 1px dashed var(--amber-400); font-family: var(--font-head); font-weight: 600; text-align: center; }
 .aidesign__turnstile { margin-top: 16px; }
 
 .refgal__empty { margin: 0; padding: 18px; border: 2px dashed var(--blue-100); border-radius: var(--radius-sm); color: var(--ink-soft); text-align: center; }
@@ -1197,7 +1207,7 @@ button { font: inherit; cursor: pointer; }
 .airesult__cap { margin: 8px 0 0; font-size: .82rem; color: var(--ink-soft); text-align: center; }
 .airesult__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .airesult__actions .btn { flex: 1 1 140px; min-height: 46px; }
-.airesult__warn { margin: 16px 0 0; padding: 12px 14px; border-radius: var(--radius-sm); background: #FFF8E6; color: #7A5A00; font-size: .9rem; }
+.airesult__warn { margin: 16px 0 0; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--amber-50); color: var(--amber-900); font-size: .9rem; }
 .airesult__line { width: 100%; margin-top: 14px; }
 
 @media (min-width: 640px) {

@@ -165,6 +165,21 @@ export function canUseAi(ctx, user) {
   return true;
 }
 
+// สถานะส่วน "สร้างภาพป้ายด้วย AI" สำหรับหน้าเว็บ (หน้าเว็บแสดงส่วนนี้เสมอ แต่ปุ่มทำงานตามสถานะนี้)
+//   ready          → AI จริงพร้อม และผู้ใช้นี้สร้างได้ (โควตายังตรวจที่ createJob)
+//   mock_test      → ใช้ Mock AI ได้ (พนักงาน / dev ในเครื่อง) — ผลเป็นภาพตัวอย่าง ไม่ใช่ AI จริง
+//   login_required → ยังไม่ล็อกอิน (กดปุ่มแล้วเปิดหน้าต่างเข้าสู่ระบบ)
+//   coming_soon    → ล็อกอินแล้ว แต่ระบบยังไม่เปิดให้ผู้ใช้นี้ (ไม่อัปโหลดรูป ไม่สร้างภาพ ไม่ใช้สิทธิ์)
+// aiReady = เปิดให้ลูกค้าทั่วไปใช้ AI จริงแล้วหรือยัง (ไม่ขึ้นกับผู้ใช้)
+export function aiReadyForCustomers(ctx) {
+  return Boolean(ctx.ai && ctx.repo && ctx.storage && ctx.ai.name !== "mock" && !ctx.aiMockStaffOnly);
+}
+export function aiStatus(ctx, user) {
+  if (!user) return "login_required";
+  if (!canUseAi(ctx, user)) return "coming_soon";
+  return ctx.ai.name === "mock" ? "mock_test" : "ready";
+}
+
 // งานทดสอบของพนักงานด้วย Mock AI ไม่ใช้เครดิตของใคร
 export function isCreditExempt(ctx, user) {
   return Boolean(ctx.ai && ctx.ai.name === "mock" && isStaffUser(user));

@@ -458,8 +458,8 @@
           </div>
         </div>
 
-        <!-- ========== AI ออกแบบภาพป้าย (ต้องล็อกอิน) ========== -->
-        <div class="aidesign reveal" id="ai-design" hidden>
+        <!-- ========== AI ออกแบบภาพป้าย (แสดงเสมอ · สร้างภาพต้องล็อกอิน · สถานะจาก /api/me) ========== -->
+        <div class="aidesign reveal" id="ai-design">
           <div class="aidesign__head">
             <div>
               <span class="eyebrow">ออกแบบภาพป้ายด้วย AI</span>
@@ -468,6 +468,7 @@
             </div>
             <p class="aidesign__quota" id="aiQuota" hidden></p>
           </div>
+          <p class="aistatus" id="aiStatus" role="status" hidden></p>
 
           <div class="aidesign__block">
             <h4>เลือกจากผลงาน SIGN VERSE <small id="refCount">(เลือกแล้ว 0/3)</small></h4>
@@ -495,6 +496,7 @@
               <div class="thumbs" id="storefrontList"></div>
             </div>
           </div>
+          <p class="aidesign__privacy">รูปที่เลือกจะอยู่ในเครื่องของคุณ และส่งขึ้นระบบเฉพาะตอนกด "สร้างภาพป้ายด้วย AI ฟรี" เมื่อระบบพร้อมใช้งานเท่านั้น</p>
 
           <div id="turnstileBox" class="aidesign__turnstile" hidden></div>
           <p class="brief__error" id="aiError" role="alert" hidden></p>
@@ -511,6 +513,7 @@
           </ol>
 
           <div class="airesult" id="aiResult" hidden>
+            <p class="airesult__preview" id="aiPreviewBadge" hidden>ภาพตัวอย่างสำหรับทดสอบระบบ — ไม่ใช่ผลลัพธ์จาก AI จริง</p>
             <div class="airesult__tabs" role="tablist">
               <button type="button" role="tab" class="airesult__tab is-active" data-tab="artwork" aria-selected="true">Artwork หน้าตรง</button>
               <button type="button" role="tab" class="airesult__tab" data-tab="mockup" aria-selected="false">Mockup หน้าร้าน</button>
