@@ -33,8 +33,7 @@ assets/images/    รูปโลโก้/ผลงานจริง (ตอ�
 ```
 
 ## Section (id ใช้กับเมนู)
-1. Header (sticky) → 2. Hero `#home` → 3. ปัญหาลูกค้า `#problems` → 4. จุดเด่น `#why`
-→ 5. บริการ `#services` → 6. ขั้นตอน `#process` → AI บรีฟ `#ai-brief` → 7. ผลงาน `#portfolio` + รีวิว `#reviews`
+1. Header (sticky) → 2. Hero `#home` → 5. บริการ `#services` → 6. ขั้นตอน `#process` → AI บรีฟ `#ai-brief` → 7. ผลงาน `#portfolio` + รีวิว `#reviews`
 → 8. FAQ `#faq` → 9. CTA `#contact` → 10. Footer + ปุ่มลอย LINE / แถบ CTA มือถือ
 
 ## Design tokens (แก้ที่ `:root` ใน css/style.css เท่านั้น)
