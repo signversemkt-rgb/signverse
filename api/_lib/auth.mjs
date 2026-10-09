@@ -1,8 +1,8 @@
-// Better Auth — เข้าสู่ระบบด้วย LINE (LINE Login) และเบอร์โทรศัพท์ + OTP · Session ในฐานข้อมูล Neon
-// - วิธีที่เปิดใช้กำหนดด้วย AUTH_PROVIDERS (ค่าเริ่มต้น "line,phone") และต้องตั้งค่าครบจึงจะแสดง
-// - Google / Facebook ยังรองรับในโค้ด แต่ปิดไว้ (ไม่อยู่ในค่าเริ่มต้น) — บัญชีเดิมในฐานข้อมูลไม่ถูกลบ
-// - LINE Login ใช้ Channel ของ LINE Login (LINE_LOGIN_CHANNEL_ID / LINE_LOGIN_CHANNEL_SECRET)
-//   ห้ามใช้ LINE_CHANNEL_SECRET ของ Messaging API (ใช้ตรวจลายเซ็น Webhook ของ OA)
+// Better Auth — เข้าสู่ระบบด้วย Facebook และเบอร์โทรศัพท์ + OTP · Session ในฐานข้อมูล Neon
+// - วิธีที่เปิดใช้กำหนดด้วย AUTH_PROVIDERS (ค่าเริ่มต้น "facebook,phone") และต้องตั้งค่าครบจึงจะใช้งานได้
+// - LINE Login / Google ยังรองรับในโค้ด แต่ปิดไว้ (เปิดคืนได้ด้วย AUTH_PROVIDERS) — บัญชีเดิมในฐานข้อมูลไม่ถูกลบ
+// - Facebook ใช้ FACEBOOK_CLIENT_ID (App ID) / FACEBOOK_CLIENT_SECRET (App Secret) จาก Meta for Developers
+// - LINE Login (ถ้าเปิด) ใช้ LINE_LOGIN_CHANNEL_ID / SECRET — ห้ามใช้ LINE_CHANNEL_SECRET ของ OA (Webhook รับออร์เดอร์)
 // Secret ทั้งหมดอยู่ฝั่ง Server เท่านั้น
 import { createHash } from "node:crypto";
 import { phoneLoginConfig, createOtpService, isThaiMobileE164, maskPhone, phoneTempEmail } from "./phone.mjs";
@@ -13,7 +13,23 @@ const SOCIAL = {
   google: (env) => [env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET],
   facebook: (env) => [env.FACEBOOK_CLIENT_ID, env.FACEBOOK_CLIENT_SECRET],
 };
-export const DEFAULT_AUTH_PROVIDERS = "line,phone";
+export const DEFAULT_AUTH_PROVIDERS = "facebook,phone";
+
+// อีเมลแทน (ตาราง user บังคับมีอีเมล) — ผูกกับรหัสผู้ใช้ของ Provider เท่านั้น · โดเมน .invalid ส่งอีเมลจริงไม่ได้
+const placeholderEmail = (prefix, label, id) =>
+  `${prefix}${createHash("sha256").update(`${label}:${id}`).digest("hex").slice(0, 24)}@${label.replace("sv-", "")}.signverse.invalid`;
+
+// Facebook: ระบุสมาชิกด้วย Facebook User ID (profile.id → account.accountId) เท่านั้น
+// - ไม่ขอ/ไม่ใช้อีเมลจาก Facebook: Facebook ส่งอีเมลแบบ "ยืนยันแล้ว" ซึ่งถ้าตรงกับบัญชีเดิม (LINE/Google)
+//   ระบบจะปฏิเสธการล็อกอิน (เพราะปิดการรวมบัญชีอัตโนมัติ) — ใช้อีเมลแทนจาก User ID แทน
+// - emailVerified = false → ไม่ถูกรวมกับบัญชีช่องทางอื่นโดยอัตโนมัติ
+export function facebookProfileToUser(profile) {
+  return {
+    email: placeholderEmail("f", "sv-facebook", profile.id),
+    name: String(profile.name || "").trim().slice(0, 80) || "สมาชิก Facebook",
+    emailVerified: false,
+  };
+}
 
 // LINE: ระบุสมาชิกด้วย LINE User ID (profile.sub → account.accountId) เท่านั้น
 // - ไม่ใช้อีเมลจริงจาก LINE: กันชนกับบัญชีเดิมที่ใช้อีเมลเดียวกัน (เช่น บัญชี Google เดิม) ซึ่งจะทำให้ล็อกอินไม่ได้
@@ -21,7 +37,7 @@ export const DEFAULT_AUTH_PROVIDERS = "line,phone";
 // - emailVerified = false → ไม่ถูกรวมกับบัญชีอื่นโดยอัตโนมัติ
 export function lineProfileToUser(profile) {
   return {
-    email: `l${createHash("sha256").update(`sv-line:${profile.sub}`).digest("hex").slice(0, 24)}@line.signverse.invalid`,
+    email: placeholderEmail("l", "sv-line", profile.sub),
     name: String(profile.name || "").trim().slice(0, 80) || "สมาชิก LINE",
     emailVerified: false,
   };
@@ -45,15 +61,25 @@ export function socialProviderConfig(env) {
     out[p] = { clientId, clientSecret };
   }
   if (out.line) out.line.mapProfileToUser = lineProfileToUser;
+  if (out.facebook) {
+    // ขอสิทธิ์เฉพาะชื่อและรูปโปรไฟล์ (public_profile) — ไม่ขออีเมล
+    Object.assign(out.facebook, { mapProfileToUser: facebookProfileToUser, disableDefaultScope: true, scope: ["public_profile"] });
+  }
   return out;
 }
 
-// วิธีเข้าสู่ระบบที่แสดงบนหน้าเว็บ (เรียงตามที่ต้องการแสดง)
+// Social provider ที่ใช้งานได้จริง (แสดงเป็นปุ่มบนหน้าเว็บ) — /api/me → providers
+const ORDER = ["facebook", "line", "google"];
 export function enabledLoginMethods(env, { mock = false } = {}) {
   const allowed = allowedAuthMethods(env);
-  const social = mock ? ["line", "google", "facebook"].filter((p) => allowed.includes(p)) : enabledProviders(env);
-  const phone = allowed.includes("phone") && phoneLoginConfig(env, { mock }).ready ? ["phone"] : [];
-  return [...social.filter((p) => p === "line"), ...phone, ...social.filter((p) => p !== "line")];
+  const social = mock ? ORDER.filter((p) => allowed.includes(p)) : enabledProviders(env);
+  return ORDER.filter((p) => social.includes(p));
+}
+
+// เบอร์โทร + OTP: "ready" (มีผู้ส่ง SMS จริง) | "coming_soon" (เปิดในตัวเลือกแต่ยังไม่มี SMS) | "off"
+export function phoneLoginStatus(env, { mock = false } = {}) {
+  if (!allowedAuthMethods(env).includes("phone")) return "off";
+  return phoneLoginConfig(env, { mock }).ready ? "ready" : "coming_soon";
 }
 
 export function authConfigured(env) {

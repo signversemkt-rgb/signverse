@@ -20,6 +20,8 @@
   --red-50: #FEF2F2;
   --line: #06C755;
   --line-dark: #05A847;
+  --fb: #1877F2;
+  --fb-dark: #0F63D6;
   --ink: #0F172A;
   --ink-soft: #475569;
   --border: #E2E8F0;
@@ -1125,11 +1127,14 @@ button { font: inherit; cursor: pointer; }
 }
 .provider:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 .provider--line { background: var(--line); border-color: var(--line); color: var(--white); }
-.provider--facebook { background: #1877F2; border-color: #1877F2; color: var(--white); }
+.provider--facebook { background: var(--fb); border-color: var(--fb); color: var(--white); }
 .provider { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 0 20px; cursor: pointer; }
 .provider__icon { width: 22px; height: 22px; flex: none; }
 .provider--line:hover { background: var(--line-dark); border-color: var(--line-dark); }
 .provider--phone { border: 2px solid var(--blue-600); color: var(--blue-700); }
+.provider--facebook:hover { background: var(--fb-dark); border-color: var(--fb-dark); }
+.provider--soon, .provider--soon:hover { flex-wrap: wrap; row-gap: 2px; padding-block: 8px; border-color: var(--border); color: var(--ink-soft); background: var(--bg); cursor: not-allowed; transform: none; box-shadow: none; }
+.provider__soon { flex-basis: 100%; font-family: var(--font-body); font-weight: 500; font-size: .8rem; color: var(--amber-900); }
 .provider--phone:hover { background: var(--blue-50); }
 /* เบอร์โทร + OTP */
 .otp { text-align: left; }

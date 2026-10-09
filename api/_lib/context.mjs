@@ -5,7 +5,7 @@ import { HttpError, allowedOrigins } from "./http.mjs";
 import { createMemoryRepo } from "./repo-memory.mjs";
 import { createMemoryStorage, createVercelStorage, resolveBlobConfig } from "./storage.mjs";
 import { createMockProvider } from "./ai-mock.mjs";
-import { enabledLoginMethods, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
+import { enabledLoginMethods, phoneLoginStatus, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
 import { phoneLoginConfig, createOtpService } from "./phone.mjs";
 import { createLineClient } from "./line.mjs";
 
@@ -52,8 +52,9 @@ export async function getContext(env = process.env) {
       liffId: env.LIFF_ID || "",                          // เปิดเผยได้ (ใช้ฝั่งหน้า LIFF)
       liffChannelId: env.LINE_LOGIN_CHANNEL_ID || "",     // ใช้ตรวจ LIFF ID token ฝั่ง Server
     },
-    // วิธีเข้าสู่ระบบที่แสดงบนหน้าเว็บ: "line" | "phone" (Google/Facebook ปิดไว้ — เปิดได้ด้วย AUTH_PROVIDERS)
+    // ปุ่มเข้าสู่ระบบบนหน้าเว็บ: social = ["facebook"] (LINE/Google ปิด — เปิดได้ด้วย AUTH_PROVIDERS) + สถานะเบอร์โทร
     providers: enabledLoginMethods(env, { mock }),
+    phoneLogin: phoneLoginStatus(env, { mock }),
     repo: null,
     storage: null,
     ai: null,

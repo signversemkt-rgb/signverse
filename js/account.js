@@ -8,14 +8,15 @@
   "use strict";
 
   const PROVIDER_LABELS = {
-    line: "ดำเนินการต่อด้วย LINE",
-    phone: "ดำเนินการต่อด้วยเบอร์โทรศัพท์",
     facebook: "ดำเนินการต่อด้วย Facebook",
+    phone: "เข้าสู่ระบบด้วยเบอร์โทรศัพท์",
+    line: "ดำเนินการต่อด้วย LINE",
   };
-  const PROVIDER_ICONS = { line: "#i-line", phone: "#i-phone" };
+  const PROVIDER_NAMES = { facebook: "Facebook", line: "LINE", google: "Google" };
+  const PROVIDER_ICONS = { facebook: "#i-facebook", line: "#i-line", phone: "#i-phone" };
   const RESEND_SEC = 60;
 
-  const state = { loaded: false, user: null, quota: null, providers: [], aiAvailable: false, aiStatus: "login_required", aiReady: false, turnstileSiteKey: null, mock: false, lineOrders: false };
+  const state = { loaded: false, user: null, quota: null, providers: [], phoneLogin: "off", aiAvailable: false, aiStatus: "login_required", aiReady: false, turnstileSiteKey: null, mock: false, lineOrders: false };
   const listeners = [];
   const beforeLogin = [];
   let lastFocus = null;
@@ -55,6 +56,7 @@
         user: data.user || null,
         quota: data.quota || null,
         providers: Array.isArray(data.providers) ? data.providers : [],
+        phoneLogin: ["ready", "coming_soon"].includes(data.phoneLogin) ? data.phoneLogin : "off",
         aiAvailable: Boolean(data.aiAvailable),
         aiStatus: typeof data.aiStatus === "string" ? data.aiStatus : (data.user ? "coming_soon" : "login_required"),
         aiReady: Boolean(data.aiReady),
@@ -63,7 +65,7 @@
         lineOrders: Boolean(data.lineOrders),
       });
     } catch {
-      Object.assign(state, { loaded: true, user: null, quota: null, providers: [], aiAvailable: false, aiStatus: "login_required", aiReady: false });
+      Object.assign(state, { loaded: true, user: null, quota: null, providers: [], phoneLogin: "off", aiAvailable: false, aiStatus: "login_required", aiReady: false });
     }
     renderHeader();
     listeners.forEach((fn) => fn(state));
@@ -89,8 +91,8 @@
       btn.title = "";
       btn.dataset.mode = "login";
     }
-    // ซ่อนปุ่มเมื่อยังไม่มี provider ที่ใช้งานได้จริง
-    btn.hidden = !state.user && state.providers.length === 0;
+    // ซ่อนปุ่มเมื่อยังไม่มีวิธีเข้าสู่ระบบที่ใช้งานได้จริง
+    btn.hidden = !state.user && state.providers.length === 0 && state.phoneLogin !== "ready";
   }
 
   // ---------- Login ----------
@@ -98,12 +100,16 @@
     const box = document.getElementById("loginProviders");
     const pending = document.getElementById("loginPending");
     box.replaceChildren();
-    state.providers.forEach((p) => {
+    // Social (Facebook) + เบอร์โทร — เบอร์โทรที่ยังไม่มีผู้ส่ง SMS จริงแสดงเป็น "กำลังเตรียมเปิดใช้งาน" (กดไม่ได้)
+    const methods = [...state.providers, ...(state.phoneLogin !== "off" ? ["phone"] : [])];
+    methods.forEach((p) => {
       if (!PROVIDER_LABELS[p]) return;
+      const soon = p === "phone" && state.phoneLogin !== "ready";
       const b = document.createElement("button");
       b.type = "button";
-      b.className = `provider provider--${p}`;
+      b.className = `provider provider--${p}${soon ? " provider--soon" : ""}`;
       b.dataset.provider = p;
+      if (soon) { b.disabled = true; b.setAttribute("aria-disabled", "true"); }
       if (PROVIDER_ICONS[p]) {
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("class", "icon provider__icon");
@@ -114,9 +120,15 @@
         b.appendChild(svg);
       }
       b.appendChild(document.createTextNode(PROVIDER_LABELS[p]));
+      if (soon) {
+        const tag = document.createElement("span");
+        tag.className = "provider__soon";
+        tag.textContent = "กำลังเตรียมเปิดใช้งาน";
+        b.appendChild(tag);
+      }
       box.appendChild(b);
     });
-    pending.hidden = state.providers.length > 0;
+    pending.hidden = state.providers.length > 0 || state.phoneLogin === "ready";
   }
 
   function showLoginError(msg) {
@@ -277,7 +289,11 @@
   });
 
   async function signIn(provider) {
-    if (provider === "phone") { showLoginError(""); showPhoneForm(true); $id("phoneInput").focus(); return; }
+    if (provider === "phone") {
+      if (state.phoneLogin !== "ready") return;           // ยังไม่มีผู้ส่ง SMS จริง → ไม่เปิดฟอร์ม OTP
+      showLoginError(""); showPhoneForm(true); $id("phoneInput").focus(); return;
+    }
+    try { sessionStorage.setItem("sv_login_provider", provider); } catch { /* โหมดส่วนตัว */ }
     const err = document.getElementById("loginError");
     err.hidden = true;
     for (const fn of beforeLogin) await fn();      // เก็บข้อมูลฟอร์มก่อนออกไปหน้า LINE (กลับมาแล้วข้อมูลไม่หาย)
@@ -333,16 +349,19 @@
   };
 
   // กลับจาก LINE แบบไม่สำเร็จ (Better Auth เติม ?error=… ใน URL) → แจ้งเป็นภาษาไทย แล้วลบพารามิเตอร์ออกจาก URL
-  const LOGIN_ERRORS = {
-    access_denied: "คุณยกเลิกการเข้าสู่ระบบด้วย LINE",
-    account_not_linked: "บัญชีนี้ยังไม่ได้เชื่อมกับ LINE กรุณาติดต่อทีมงานทาง LINE",
-  };
   function takeLoginError() {
     const url = new URL(location.href);
     const code = url.searchParams.get("error");
     if (!code) return null;
+    let via = "";
+    try { via = PROVIDER_NAMES[sessionStorage.getItem("sv_login_provider")] || ""; sessionStorage.removeItem("sv_login_provider"); } catch { /* ไม่มี */ }
+    const LOGIN_ERRORS = {
+      access_denied: `คุณยกเลิกการเข้าสู่ระบบ${via ? `ด้วย ${via}` : ""} — กดปุ่มอีกครั้งเมื่อพร้อม ข้อมูลที่กรอกไว้ยังอยู่`,
+      account_not_linked: "บัญชีนี้เชื่อมกับช่องทางอื่นอยู่แล้ว กรุณาเข้าสู่ระบบด้วยช่องทางเดิม หรือติดต่อทีมงานทาง LINE",
+    };
     url.searchParams.delete("error");
     url.searchParams.delete("error_description");
+    url.searchParams.delete("error_reason");
     history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
     return LOGIN_ERRORS[code] || "เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
   }

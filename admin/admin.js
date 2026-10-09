@@ -82,10 +82,9 @@
       return;
     }
     // เบอร์โทร + OTP ทำที่หน้าหลัก (Session เดียวกัน) แล้วกลับมาหน้านี้
-    (data.providers || []).forEach((p) => box.append(p === "phone"
-      ? el("a", { class: "btn btn--primary", href: "/#login" }, PROVIDER_LABELS.phone)
-      : el("button", { class: "btn btn--primary", type: "button", onclick: () => signIn(p) }, PROVIDER_LABELS[p] || p)));
-    if (!(data.providers || []).length) $("gateText").textContent = "ระบบเข้าสู่ระบบยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์";
+    (data.providers || []).forEach((p) => box.append(el("button", { class: "btn btn--primary", type: "button", onclick: () => signIn(p) }, PROVIDER_LABELS[p] || p)));
+    if (data.phoneLogin === "ready") box.append(el("a", { class: "btn btn--primary", href: "/#login" }, PROVIDER_LABELS.phone));
+    if (!(data.providers || []).length && data.phoneLogin !== "ready") $("gateText").textContent = "ระบบเข้าสู่ระบบยังไม่ได้ตั้งค่าบนเซิร์ฟเวอร์";
   }
   async function mockLogin(role) {
     await fetch("/api/me?mock=login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role }) });

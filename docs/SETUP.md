@@ -50,7 +50,7 @@
 - บัญชีที่เคยสมัครด้วย Google ยังอยู่ในฐานข้อมูล ไม่ถูกลบ
 - เปิดคืนได้ด้วย `AUTH_PROVIDERS=line,phone,google` แล้ว Redeploy (ต้องตั้ง OAuth Client ตามเดิม: Redirect URI `https://signverse-azure.vercel.app/api/auth/callback/google`)
 
-## 5. LINE Login (สมัคร / เข้าสู่ระบบด้วย LINE)
+## 5. LINE Login (ปิดอยู่ — เปิดได้ด้วย `AUTH_PROVIDERS=facebook,line,phone`)
 
 > **LINE Login Channel ≠ Messaging API Channel ของ OA** — ใช้คนละ Channel ID/Secret
 > `LINE_CHANNEL_SECRET` / `LINE_CHANNEL_ACCESS_TOKEN` เป็นของ OA (Webhook) **ห้ามนำมาใช้กับ LINE Login** และห้ามแก้
@@ -86,24 +86,30 @@
 | `OTP_DAILY_LIMIT` | เพดาน SMS ทั้งระบบต่อวัน เช่น `200` (กันค่าใช้จ่ายผิดปกติ) |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | แนะนำ: Cloudflare Turnstile (ฟรี) กันบอทก่อนส่ง OTP |
 
-5. Redeploy → `/api/me` ต้องมี `"providers":["line","phone"]`
+5. Redeploy → `/api/me` ต้องมี `"phoneLogin":"ready"`
 
 กฎความปลอดภัยที่ระบบบังคับ: OTP 6 หลัก หมดอายุ 5 นาที · กรอกผิดได้ 5 ครั้งต่อรหัส · ขอรหัสใหม่ได้หลัง 60 วินาที · จำกัด 5 ครั้ง/ชม. และ 10 ครั้ง/วันต่อเบอร์ · 10 ครั้ง/ชม. และ 30 ครั้ง/วันต่อ IP · เพดานรวมต่อวัน · รับเฉพาะเบอร์มือถือไทย · เก็บ OTP/เบอร์/IP เป็น hash · Log ไม่มีเบอร์เต็มหรือ OTP · SMS จำลองใช้ไม่ได้บน Production
 
-## 6. Facebook Login
+## 6. Facebook Login (วิธีหลัก · ค่าเริ่มต้น `AUTH_PROVIDERS=facebook,phone`)
 
-1. เปิด [Meta for Developers](https://developers.facebook.com/apps/) → **Create app**
-2. Use case: **Authenticate and request data from users with Facebook Login**
+1. เปิด [Meta for Developers](https://developers.facebook.com/apps/) → **Create app** (ใช้บัญชี Facebook ของร้าน/ผู้ดูแล)
+2. Use case: **Authenticate and request data from users with Facebook Login** · ประเภทแอป: Consumer/Business ตามที่ Meta แนะนำ
 3. **App settings → Basic**
-   - **App ID** → `FACEBOOK_CLIENT_ID`, **App secret** → `FACEBOOK_CLIENT_SECRET`
-   - ใส่ Privacy Policy URL, **User data deletion** (URL หรือคำแนะนำการลบข้อมูล), หมวดหมู่, ไอคอนแอป
-4. **Facebook Login → Settings** → Valid OAuth Redirect URIs:
-   `https://signverse-azure.vercel.app/api/auth/callback/facebook`
-5. Permissions: ใช้เฉพาะ `public_profile` และ `email`
-6. เปลี่ยน App mode เป็น **Live** — Meta อาจขอ **Business Verification / App Review** ซึ่งอาจใช้เวลาหลายวัน
+   - **App ID** → Vercel `FACEBOOK_CLIENT_ID` · **App secret** → Vercel `FACEBOOK_CLIENT_SECRET` (ห้ามแชร์ / ห้ามใส่ในโค้ด)
+   - **App domains**: `signverse-azure.vercel.app`
+   - **Privacy Policy URL**: `https://signverse-azure.vercel.app/privacy.html`
+   - **User data deletion** → เลือก "Data deletion instructions URL": `https://signverse-azure.vercel.app/privacy.html#data-deletion`
+   - หมวดหมู่ ไอคอนแอป (1024×1024) และอีเมลติดต่อ
+4. **Facebook Login → Settings**
+   - **Valid OAuth Redirect URIs**: `https://signverse-azure.vercel.app/api/auth/callback/facebook` (ต้องตรงทุกตัวอักษร)
+   - Client OAuth login: On · Web OAuth login: On · Enforce HTTPS: On
+5. **Permissions**: ระบบขอเฉพาะ `public_profile` (ชื่อ + รูปโปรไฟล์) — **ไม่ขออีเมล** ไม่ต้องส่ง App Review สำหรับสิทธิ์เพิ่มเติม
+6. สลับ **App mode** จาก Development เป็น **Live** (ถ้ายังเป็น Development ล็อกอินได้เฉพาะผู้ดูแล/ผู้ทดสอบของแอป) — Meta อาจขอยืนยันธุรกิจ (Business Verification)
+7. Vercel → ตั้งค่า 2 ตัวแปรด้านบน (Production) → Redeploy → `/api/me` ต้องมี `"providers":["facebook"]`
 
-> **หมายเหตุ:** ปุ่มบนเว็บจะแสดงเฉพาะ provider ที่ตั้งค่า Client ID + Secret ครบแล้วเท่านั้น
-> ถ้ายังไม่ได้ตั้งค่าทั้ง 3 ราย ปุ่ม "เข้าสู่ระบบ" จะถูกซ่อนและหน้าต่างล็อกอินจะแจ้งว่า "รอเปิดใช้งาน"
+> สมาชิก Facebook ถูกระบุด้วย **Facebook User ID** เท่านั้น (ไม่ใช้อีเมล) → เข้าสู่ระบบซ้ำได้บัญชีเดิม และไม่ถูกรวมกับบัญชี LINE/Google/เบอร์โทรเดิมโดยอัตโนมัติ
+> บัญชี LINE / Google เดิมยังอยู่ในฐานข้อมูล · เปิดคืนได้ด้วย `AUTH_PROVIDERS` เช่น `facebook,line,phone`
+> เบอร์โทรจะแสดง "กำลังเตรียมเปิดใช้งาน" (กดไม่ได้) จนกว่าจะตั้งค่า SMS จริงตามข้อ 5.5
 
 ## 6.5 LINE OA @signverse — ส่งคำสั่งผลิตเข้าแชตของลูกค้า
 
@@ -198,10 +204,10 @@
 
 ไม่มีรหัสผ่านเริ่มต้นและไม่มีหน้าสมัคร Admin — ต้องยกสิทธิ์จากฐานข้อมูลเท่านั้น
 
-1. เปิดเว็บไซต์ → กด **เข้าสู่ระบบ** ด้วย LINE หรือเบอร์โทรศัพท์ของเจ้าของร้าน 1 ครั้ง
+1. เปิดเว็บไซต์ → กด **เข้าสู่ระบบ** ด้วย Facebook (หรือเบอร์โทรศัพท์เมื่อเปิดใช้) ของเจ้าของร้าน 1 ครั้ง
 2. Neon Console → SQL Editor → หาบัญชีของคุณ แล้วยกสิทธิ์ด้วย `id` (บัญชีเบอร์โทร/LINE อาจใช้อีเมลแทนภายในระบบ จึงไม่ควรค้นด้วยอีเมล):
    ```sql
-   -- บัญชีเบอร์โทร: ค้นด้วยเบอร์แบบ +66 (เช่น 081-234-5678 → +66812345678) · บัญชี LINE: ดูจากชื่อ LINE
+   -- บัญชีเบอร์โทร: ค้นด้วยเบอร์แบบ +66 (เช่น 081-234-5678 → +66812345678) · บัญชี Facebook: ดูจากชื่อ Facebook
    SELECT "id", "name", "phoneNumber", "role", "createdAt" FROM "user" ORDER BY "createdAt" DESC LIMIT 5;
    UPDATE "user" SET "role" = 'admin' WHERE "id" = 'id ของคุณจากคำสั่งด้านบน';
    ```
@@ -242,7 +248,7 @@ ELECTRON_RUN_AS_NODE=1 "/Applications/Cursor.app/Contents/MacOS/Cursor" tools/de
 |---|---|---|
 | Neon | 1 GB, 100 CU-ชม./เดือน | ฐานข้อมูลหยุดจนรอบถัดไป หรืออัปเกรด Launch (จ่ายตามใช้) |
 | Vercel Blob (Hobby) | 1 GB, รับส่งข้อมูล 10 GB/เดือน | Blob ใช้งานไม่ได้ 30 วัน (ไม่เก็บเงิน) · Pro คิดตามใช้ |
-| Better Auth / LINE Login | ฟรี | — |
+| Better Auth / Facebook Login | ฟรี | — |
 | SMS OTP (ThaiBulkSMS) | ประมาณ 0.15–0.48 บาท/SMS ตามแพ็กเกจ | ซื้อเครดิตล่วงหน้า · ตั้ง `OTP_DAILY_LIMIT` กันค่าใช้จ่ายผิดปกติ |
 | Vercel Cron | 1 งาน/วัน (ฟรีบน Hobby) | — |
 | AI สร้างภาพ (เมื่อเปิดจริง) | — | ประมาณ 4–9 บาท/ชุด × จำนวนผู้ใช้สิทธิ์ (จำกัดด้วย `AI_DAILY_JOB_LIMIT`) |

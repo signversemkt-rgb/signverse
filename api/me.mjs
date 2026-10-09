@@ -29,6 +29,7 @@ export default route(async (req, res, ctx) => {
     user: user ? { id: user.id, name: user.name, role: user.role, image: user.image || null } : null,
     quota,
     providers: ctx.authReady ? ctx.providers : [],
+    phoneLogin: ctx.authReady ? ctx.phoneLogin : "off",           // ready | coming_soon | off (coming_soon = ยังไม่มีผู้ส่ง SMS จริง)
     aiAvailable: canUseAi(ctx, user),
     aiStatus: aiStatus(ctx, user),
     aiReady: aiReadyForCustomers(ctx),

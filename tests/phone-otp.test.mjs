@@ -13,7 +13,7 @@ globalThis.fetch = async () => { throw new Error("NETWORK CALL BLOCKED IN TESTS"
 const ORIGIN = "http://localhost:3000";
 const P = await import("../api/_lib/phone.mjs");
 const { createMemoryRepo } = await import("../api/_lib/repo-memory.mjs");
-const { enabledLoginMethods, enabledProviders } = await import("../api/_lib/auth.mjs");
+const { enabledLoginMethods, enabledProviders, phoneLoginStatus } = await import("../api/_lib/auth.mjs");
 const authRoute = (await import("../api/auth/index.mjs")).default;
 const me = (await import("../api/me.mjs")).default;
 const { getContext } = await import("../api/_lib/context.mjs");
@@ -157,17 +157,16 @@ test("Production: SMS จำลองใช้ไม่ได้ และต้
   assert.throws(() => P.createOtpService({ repo: {}, sms: {}, secret: "short", uuid }), /otp_secret_missing/);
 });
 
-test("วิธีเข้าสู่ระบบ: ค่าเริ่มต้น LINE + เบอร์โทร · Google ไม่แสดงแม้มีค่า · ไม่ใช้ secret ของ Messaging API", () => {
-  const base = { DATABASE_URL: "x", GOOGLE_CLIENT_ID: "g", GOOGLE_CLIENT_SECRET: "gs" };
-  assert.deepEqual(enabledProviders(base), [], "Google ปิดเป็นค่าเริ่มต้น");
-  assert.deepEqual(enabledProviders({ ...base, LINE_CHANNEL_SECRET: "messaging-secret" }), [], "secret ของ OA ไม่เปิด LINE Login");
-  const line = { ...base, LINE_LOGIN_CHANNEL_ID: "200", LINE_LOGIN_CHANNEL_SECRET: "ls" };
-  assert.deepEqual(enabledProviders(line), ["line"]);
+test("วิธีเข้าสู่ระบบ: ค่าเริ่มต้น Facebook + เบอร์โทร · Google/LINE ไม่แสดงแม้มีค่า", () => {
+  const base = { DATABASE_URL: "x", GOOGLE_CLIENT_ID: "g", GOOGLE_CLIENT_SECRET: "gs", LINE_LOGIN_CHANNEL_ID: "200", LINE_LOGIN_CHANNEL_SECRET: "ls" };
+  assert.deepEqual(enabledProviders(base), [], "Google / LINE ปิดเป็นค่าเริ่มต้น");
+  const fb = { ...base, FACEBOOK_CLIENT_ID: "fb", FACEBOOK_CLIENT_SECRET: "fs" };
+  assert.deepEqual(enabledLoginMethods(fb), ["facebook"]);
   const phone = { SMS_PROVIDER: "thaibulksms", THAIBULKSMS_API_KEY: "k", THAIBULKSMS_API_SECRET: "s", SMS_SENDER_NAME: "SV", OTP_HASH_SECRET: SECRET };
-  assert.deepEqual(enabledLoginMethods({ ...line, ...phone }), ["line", "phone"]);
-  assert.deepEqual(enabledLoginMethods({ ...line, ...phone, AUTH_PROVIDERS: "line,phone,google" }), ["line", "phone", "google"], "เปิด Google คืนได้ด้วย AUTH_PROVIDERS");
-  assert.deepEqual(enabledLoginMethods({ ...line }), ["line"], "SMS ยังไม่ตั้ง = ไม่แสดงเบอร์โทร");
-  assert.deepEqual(enabledLoginMethods({}, { mock: true }), ["line", "phone"]);
+  assert.equal(phoneLoginStatus({ ...fb, ...phone }), "ready");
+  assert.equal(phoneLoginStatus(fb), "coming_soon", "SMS ยังไม่ตั้ง = กำลังเตรียมเปิดใช้งาน (ใช้ไม่ได้)");
+  assert.deepEqual(enabledLoginMethods({}, { mock: true }), ["facebook"]);
+  assert.equal(phoneLoginStatus({}, { mock: true }), "ready");
 });
 
 test("ThaiBulkSMS: รูปแบบคำขอถูกต้อง (Basic Auth, เบอร์ไทย, ชื่อผู้ส่ง) และแจ้งเมื่อส่งไม่สำเร็จ", async () => {
@@ -202,9 +201,10 @@ async function phoneLogin(phone, ip) {
   return v.headers["set-cookie"].split(";")[0];
 }
 
-test("API: แสดงเฉพาะ LINE + เบอร์โทร (ไม่มี Google)", async () => {
+test("API: แสดงเฉพาะ Facebook + เบอร์โทร (ไม่มี Google / LINE)", async () => {
   const m = (await call(me)).json;
-  assert.deepEqual(m.providers, ["line", "phone"]);
+  assert.deepEqual(m.providers, ["facebook"]);
+  assert.equal(m.phoneLogin, "ready");
 });
 
 test("API: สมาชิกใหม่ด้วยเบอร์โทร → สร้างบัญชี + ได้สิทธิ์ฟรี 1 งาน · ชื่อเป็นเบอร์ที่ปิดบัง", async () => {
@@ -251,8 +251,8 @@ test("API: Session — ไม่มี cookie = ไม่ได้ล็อก�
   assert.equal(badPhone.json.code, "invalid_phone");
 });
 
-test("API: LINE (โหมดทดสอบ) ยังเข้าสู่ระบบได้ และแยกบัญชีจากเบอร์โทร (ไม่รวมอัตโนมัติ)", async () => {
-  const r = await call(me, { method: "POST", url: "/api/me?mock=login", body: { role: "customer", provider: "line" } });
+test("API: Facebook (โหมดทดสอบ) เข้าสู่ระบบได้ และแยกบัญชีจากเบอร์โทร (ไม่รวมอัตโนมัติ)", async () => {
+  const r = await call(me, { method: "POST", url: "/api/me?mock=login", body: { role: "customer", provider: "facebook" } });
   const lineCookie = r.headers["set-cookie"].split(";")[0];
   const lineUser = (await call(me, { cookie: lineCookie })).json.user;
   assert.ok(lineUser);
