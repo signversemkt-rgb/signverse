@@ -53,6 +53,14 @@ http.createServer(async (req, res) => {
     try { await h(req, res); } catch (e) { console.error(e); res.statusCode = 500; res.end("{}"); }
     return;
   }
+  // รูปที่ "เผยแพร่" ใน Public Blob จำลอง (memory) — ให้ดูแกลเลอรี/ผลงานในเครื่องได้
+  if (url.pathname.startsWith("/mock-public/")) {
+    const { getContext } = await import(pathToFileURL(path.join(ROOT, "api/_lib/context.mjs")).href);
+    const f = (await getContext()).storage?._pub?.get(url.pathname);
+    if (!f) { res.statusCode = 404; return res.end("Not found"); }
+    res.setHeader("Content-Type", f.mime);
+    return res.end(Buffer.from(f.bytes));
+  }
   let p = decodeURIComponent(url.pathname);
   if (BLOCKED.test(p)) { res.statusCode = 404; return res.end("Not found"); }
   if (p.endsWith("/")) p += "index.html";

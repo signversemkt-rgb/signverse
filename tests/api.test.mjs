@@ -183,6 +183,22 @@ test("AI รับเฉพาะภาพอ้างอิงที่เผ�
 });
 
 // ---------- Gallery ----------
+test("Gallery ?all=1 (แท็บ ทั้งหมด ในส่วนผลงาน): รวมรูปที่เผยแพร่ทุกอัลบั้ม · ไม่รวมอัลบั้ม/รูปที่ยังไม่เผยแพร่", async () => {
+  const staff = await login("staff");
+  const a = await makePublishedImage(staff);
+  const b = await makePublishedImage(staff);
+  const hidden = await makePublishedImage(staff);                 // อัลบั้มนี้ไม่เผยแพร่
+  for (const x of [a, b]) await call(admin, { method: "POST", url: "/api/admin", cookie: staff, body: { action: "updateAlbum", id: x.album.id, published: true } });
+  for (const x of [a, b, hidden]) await call(admin, { method: "POST", url: "/api/admin", cookie: staff, body: { action: "publishImage", id: x.img.id, published: true } });
+  const all = (await call(gallery, { url: "/api/gallery?all=1&page=0" })).json;
+  const ids = all.images.map((i) => i.id);
+  assert.ok(ids.includes(a.img.id) && ids.includes(b.img.id));
+  assert.ok(!ids.includes(hidden.img.id), "อัลบั้มที่ยังไม่เผยแพร่ไม่แสดง");
+  assert.ok(all.images.every((i) => i.albumId && i.url && i.thumbUrl && !("private_key" in i)), "ส่งเฉพาะข้อมูลสาธารณะ");
+  assert.equal(typeof all.hasMore, "boolean");
+  for (const x of [a, b, hidden]) await call(admin, { method: "POST", url: "/api/admin", cookie: staff, body: { action: "publishImage", id: x.img.id, published: false } });
+});
+
 test("Gallery: แสดงเฉพาะรูปที่เผยแพร่, ซ่อน/ลบแล้วหาย, กู้คืนจากถังขยะได้, ต้นฉบับอยู่ Private", async () => {
   const staff = await login("staff");
   const { album, img } = await makePublishedImage(staff);

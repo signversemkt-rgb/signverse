@@ -681,6 +681,12 @@ button { font: inherit; cursor: pointer; }
 .work__thumb--e span { background: var(--white); color: var(--blue-900); }
 .work__thumb--f { background: linear-gradient(145deg, var(--cyan-400), var(--blue-600)); }
 .work__thumb--f span { border: 2px dashed var(--white); color: var(--white); }
+/* รูปผลงานจริงจากหลังบ้าน */
+.work__thumb--photo { width: 100%; padding: 0; border: 0; background: var(--blue-50); cursor: zoom-in; }
+.work__thumb--photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.work__thumb--photo:focus-visible { outline: 3px solid var(--blue-400); outline-offset: 3px; }
+.works__more { display: flex; justify-content: center; margin-top: 24px; }
+.works__more:has(> [hidden]) { display: none; }
 .work figcaption { display: flex; flex-direction: column; padding: 14px 4px 0; }
 .work figcaption strong { font-family: var(--font-head); font-weight: 600; }
 .work figcaption span { color: var(--ink-soft); font-size: .9rem; }

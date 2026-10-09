@@ -1,5 +1,6 @@
 // GET /api/gallery            → อัลบั้มที่เผยแพร่ (พร้อมภาพปก)
 // GET /api/gallery?album=ID   → รูปที่เผยแพร่ในอัลบั้ม (แบ่งหน้า)
+// GET /api/gallery?all=1      → รูปที่เผยแพร่ทุกอัลบั้ม (แบ่งหน้า) — ใช้กับแท็บ "ทั้งหมด" ในส่วนผลงานหน้าแรก
 // แสดงเฉพาะรูป Published ในอัลบั้ม Published ที่ไม่ถูกลบ
 import { route } from "./_lib/route.mjs";
 import { sendJson, query, HttpError, isId } from "./_lib/http.mjs";
@@ -13,12 +14,13 @@ export default route(async (req, res, ctx) => {
   need(ctx, "repo");
   const q = query(req);
   // แคชสั้น ๆ ที่ CDN: รูปที่เพิ่งเผยแพร่ปรากฏภายใน ~1 นาทีโดยไม่ต้อง Deploy ใหม่
-  const cache = "public, s-maxage=60, stale-while-revalidate=300";
+  // max-age=0 = เบราว์เซอร์ไม่เก็บผลเก่าไว้เอง (ไม่งั้นผู้เข้าชมเดิมอาจไม่เห็นผลงานใหม่) — CDN ยังแคชตาม s-maxage
+  const cache = "public, max-age=0, s-maxage=60, stale-while-revalidate=300";
 
-  if (q.album) {
-    if (!isId(q.album)) throw new HttpError(400, "bad_request");
+  if (q.album || q.all === "1") {
+    if (q.album && !isId(q.album)) throw new HttpError(400, "bad_request");
     const page = Math.max(0, Number.parseInt(q.page || "0", 10) || 0);
-    const { rows, total } = await ctx.repo.listImages({ albumId: q.album, publishedOnly: true, limit: PAGE, offset: page * PAGE });
+    const { rows, total } = await ctx.repo.listImages({ albumId: q.album || null, publishedOnly: true, limit: PAGE, offset: page * PAGE });
     res.setHeader("Cache-Control", cache);
     res.statusCode = 200;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
