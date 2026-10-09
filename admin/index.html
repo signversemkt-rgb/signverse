@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>SIGN VERSE · หลังบ้าน</title>
+  <link rel="icon" type="image/png" href="../assets/images/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="../"><img src="../assets/images/logo.png" alt="" width="226" height="256"> SIGN VERSE <span>หลังบ้าน</span></a>
+    <div class="topbar__user" id="userBox" hidden>
+      <span id="userName"></span>
+      <button type="button" class="btn btn--ghost" id="logoutBtn">ออกจากระบบ</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- ยังไม่ล็อกอิน / ไม่มีสิทธิ์ -->
+    <section class="gate" id="gate" hidden>
+      <h1>เข้าสู่ระบบพนักงาน</h1>
+      <p id="gateText">ใช้บัญชีที่ได้รับสิทธิ์พนักงานจากผู้ดูแลเท่านั้น</p>
+      <div class="gate__providers" id="gateProviders"></div>
+      <p class="msg msg--error" id="gateError" hidden></p>
+    </section>
+
+    <section id="app" hidden>
+      <nav class="tabs" role="tablist">
+        <button type="button" class="tab is-active" data-tab="dash">ภาพรวม</button>
+        <button type="button" class="tab" data-tab="orders">ออร์เดอร์</button>
+        <button type="button" class="tab" data-tab="gallery">อัลบั้มและรูป</button>
+        <button type="button" class="tab" data-tab="trash">ถังขยะ</button>
+        <button type="button" class="tab" data-tab="quota">จัดการสิทธิ์ AI</button>
+        <button type="button" class="tab" data-tab="line">LINE OA</button>
+        <button type="button" class="tab" data-tab="audit">ประวัติ</button>
+      </nav>
+      <p class="msg" id="flash" role="status" hidden></p>
+
+      <!-- ภาพรวม -->
+      <div class="panel" data-panel="dash">
+        <div class="stats" id="stats"></div>
+      </div>
+
+      <!-- ออร์เดอร์ -->
+      <div class="panel" data-panel="orders" hidden>
+        <form class="toolbar" id="orderSearchForm">
+          <input type="search" name="search" placeholder="ค้นหาเลขออร์เดอร์ / ชื่อร้าน / อีเมลลูกค้า" aria-label="ค้นหาออร์เดอร์">
+          <select name="status" aria-label="สถานะ">
+            <option value="">ทุกสถานะ</option><option value="new">ใหม่</option><option value="contacted">ติดต่อแล้ว</option>
+            <option value="confirmed">ยืนยันแล้ว</option><option value="in_production">กำลังผลิต</option>
+            <option value="completed">เสร็จแล้ว</option><option value="cancelled">ยกเลิก</option>
+          </select>
+          <button class="btn btn--primary" type="submit">ค้นหา</button>
+        </form>
+        <div class="tablewrap"><table class="table" id="orderTable">
+          <thead><tr><th>เลขออร์เดอร์</th><th>ลูกค้า</th><th>ป้าย</th><th>ราคาประเมิน</th><th>สถานะการผลิต</th><th>ส่งผ่าน LINE</th><th>วันที่</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <button class="btn btn--ghost more" id="orderMore" hidden>โหลดเพิ่ม</button>
+        <div class="card" id="orderDetail" hidden></div>
+      </div>
+
+      <!-- อัลบั้มและรูป -->
+      <div class="panel" data-panel="gallery" hidden>
+        <div class="gallery">
+          <aside class="albums">
+            <form class="card form" id="albumForm">
+              <h2>สร้างอัลบั้มใหม่</h2>
+              <label>ชื่ออัลบั้ม<input name="title" maxlength="120" required></label>
+              <label>รายละเอียด<textarea name="description" rows="2" maxlength="1000"></textarea></label>
+              <button class="btn btn--primary" type="submit">สร้างอัลบั้ม</button>
+            </form>
+            <ul class="albumlist" id="albumList"></ul>
+          </aside>
+          <div class="images">
+            <div class="card" id="albumDetail" hidden>
+              <form class="form form--row" id="albumEdit">
+                <label>ชื่ออัลบั้ม<input name="title" maxlength="120" required></label>
+                <label>รายละเอียด<input name="description" maxlength="1000"></label>
+                <label class="check"><input type="checkbox" name="published"> เผยแพร่อัลบั้ม</label>
+                <div class="form__actions">
+                  <button class="btn btn--primary" type="submit">บันทึก</button>
+                  <button class="btn btn--danger" type="button" id="albumDelete">ลบอัลบั้ม</button>
+                </div>
+              </form>
+              <label class="upload">
+                <input type="file" id="imageUpload" accept="image/jpeg,image/png,image/webp" multiple>
+                <span>+ อัปโหลดรูป (เลือกได้หลายรูป · JPG, PNG, WebP)</span>
+              </label>
+              <p class="msg" id="uploadStatus" hidden></p>
+            </div>
+            <div class="toolbar">
+              <input type="search" id="imageSearch" placeholder="ค้นหาชื่อรูป / คำอธิบาย" aria-label="ค้นหารูป">
+              <select id="albumFilter" aria-label="กรองตามอัลบั้ม"><option value="">ทุกอัลบั้ม</option></select>
+            </div>
+            <div class="grid" id="imageGrid"></div>
+            <button class="btn btn--ghost more" id="imageMore" hidden>โหลดเพิ่ม</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ถังขยะ -->
+      <div class="panel" data-panel="trash" hidden>
+        <p class="hint">รูปในถังขยะจะถูกลบถาวรอัตโนมัติหลังครบกำหนด กู้คืนได้ก่อนหน้านั้น</p>
+        <div class="grid" id="trashGrid"></div>
+      </div>
+
+      <!-- จัดการสิทธิ์ AI -->
+      <div class="panel" data-panel="quota" hidden>
+        <form class="toolbar" id="userSearchForm">
+          <input type="search" name="search" placeholder="ค้นหาสมาชิก (ชื่อ / อีเมล / รหัส)" aria-label="ค้นหาสมาชิก">
+          <button class="btn btn--primary" type="submit">ค้นหา</button>
+        </form>
+        <div class="tablewrap"><table class="table" id="userTable">
+          <thead><tr><th>สมาชิก</th><th>ล็อกอินด้วย</th><th>สิทธิ์</th><th>สิทธิ์ AI</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+        <div class="card" id="userJobs" hidden></div>
+        <h2 class="h2">งานที่ต้องตรวจสอบ</h2>
+        <div class="tablewrap"><table class="table" id="problemTable">
+          <thead><tr><th>งาน</th><th>สมาชิก</th><th>สถานะ</th><th>สิทธิ์</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+
+      <!-- LINE -->
+      <div class="panel" data-panel="line" hidden>
+        <div class="card" id="lineStatus"></div>
+        <div class="card" id="lineGroupCard" hidden>
+          <h2>ผูกกลุ่ม LINE พนักงาน (ระบบเดิม — ปิดอยู่)</h2>
+          <ol class="hint">
+            <li>เชิญบอท LINE Official Account ของร้านเข้ากลุ่มพนักงาน</li>
+            <li>ผู้ดูแลกด "สร้างรหัสผูกกลุ่ม" (รหัสใช้ได้ครั้งเดียว หมดอายุใน 10 นาที)</li>
+            <li>พิมพ์ข้อความตามที่แสดงในกลุ่ม → บอทตอบยืนยัน</li>
+          </ol>
+          <div class="form__actions">
+            <button class="btn btn--primary" type="button" id="lineBindBtn">สร้างรหัสผูกกลุ่ม</button>
+            <button class="btn btn--danger" type="button" id="lineUnbindBtn">ยกเลิกการผูกกลุ่ม</button>
+          </div>
+          <p class="msg" id="lineBindCode" hidden></p>
+        </div>
+      </div>
+
+      <!-- ประวัติ -->
+      <div class="panel" data-panel="audit" hidden>
+        <div class="toolbar">
+          <select id="auditType" aria-label="ประเภทประวัติ"><option value="">ทั้งหมด</option><option value="credits">การปรับสิทธิ์</option></select>
+        </div>
+        <div class="tablewrap"><table class="table" id="auditTable">
+          <thead><tr><th>เวลา</th><th>ผู้ดำเนินการ</th><th>การกระทำ</th><th>เป้าหมาย</th><th>รายละเอียด</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="admin.js"></script>
+</body>
+</html>

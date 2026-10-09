@@ -23,6 +23,9 @@
     <symbol id="i-arrow" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5 12h14M13 6l6 6-6 6"/></symbol>
     <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="m12 2 3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21l1.2-6.8-5-4.9 6.9-1z"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5l1.9 5.6 5.6 1.9-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.9zM19 15l.9 2.1 2.1.9-2.1.9L19 21l-.9-2.1-2.1-.9 2.1-.9z"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></g></symbol>
+    <symbol id="i-store" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/><path d="M5 12v8h14v-8M10 20v-5h4v5"/></g></symbol>
   </svg>
 
   <!-- ========== 1. Header ========== -->
@@ -42,6 +45,7 @@
           <li><a href="#reviews" class="nav__link">รีวิว</a></li>
           <li><a href="#faq" class="nav__link">คำถามที่พบบ่อย</a></li>
         </ul>
+        <button type="button" class="nav__login" id="authBtn">เข้าสู่ระบบ</button>
         <a href="#" class="btn btn--line btn--sm js-line-link nav__cta" target="_blank" rel="noopener">
           <svg class="icon"><use href="#i-line"/></svg> แอดไลน์
         </a>
@@ -76,20 +80,50 @@
           </ul>
         </div>
 
-        <div class="hero__visual reveal" aria-hidden="true">
-          <div class="mock mock--sign">
-            <span class="mock__glow"></span>
-            <span class="mock__label">OPEN</span>
-            <span class="mock__name">CAFÉ DE NOON</span>
-          </div>
-          <div class="mock mock--card">
-            <span class="mock__card-logo">SV</span>
-            <span class="mock__card-line"></span>
-            <span class="mock__card-line mock__card-line--short"></span>
-          </div>
-          <div class="mock mock--tag">
-            <svg class="icon"><use href="#i-check"/></svg> ออกแบบฟรี ทุกงาน
-          </div>
+        <div class="hero__visual reveal">
+          <article class="ai-card" aria-labelledby="aiCardTitle">
+            <svg class="icon ai-card__deco" aria-hidden="true"><use href="#i-spark"/></svg>
+            <div class="ai-card__head">
+              <span class="ai-card__badge"><svg class="icon"><use href="#i-spark"/></svg> SIGN VERSE AI</span>
+              <h2 class="ai-card__title" id="aiCardTitle">ออกแบบป้ายด้วย <span class="ai-card__ai">AI</span></h2>
+              <p class="ai-card__lead">เปลี่ยนไอเดียของคุณให้เป็นแบบป้ายจริง</p>
+            </div>
+
+            <div class="ai-card__stage">
+              <div class="sign3d">
+                <picture class="sign3d__logo">
+                  <source srcset="assets/images/logo-3d.avif" type="image/avif">
+                  <img src="assets/images/logo-3d.png" alt="โลโก้ SV ของ SIGN VERSE" width="354" height="400" decoding="async">
+                </picture>
+                <span class="sign3d__text" aria-hidden="true"><span class="sign3d__word" data-text="SIGN">SIGN</span><span class="sign3d__word sign3d__word--blue" data-text="VERSE">VERSE</span></span>
+              </div>
+            </div>
+
+            <div class="ai-card__info">
+              <div class="ai-card__free">
+                <p class="ai-card__free-title"><svg class="icon"><use href="#i-check"/></svg> ทดลองออกแบบฟรี</p>
+                <p class="ai-card__free-text">สร้างแบบป้ายได้ง่าย ๆ ภายในไม่กี่ขั้นตอน</p>
+              </div>
+              <ul class="ai-card__features">
+                <li>
+                  <span class="ai-card__ficon"><svg class="icon"><use href="#i-image"/></svg></span>
+                  <span class="ai-card__ftext"><strong>Artwork</strong><small>ภาพแบบป้าย</small></span>
+                  <span class="ai-card__soon">เร็ว ๆ นี้</span>
+                </li>
+                <li>
+                  <span class="ai-card__ficon"><svg class="icon"><use href="#i-store"/></svg></span>
+                  <span class="ai-card__ftext"><strong>Mockup</strong><small>ภาพจำลองหน้าร้าน</small></span>
+                  <span class="ai-card__soon">เร็ว ๆ นี้</span>
+                </li>
+              </ul>
+            </div>
+
+            <a href="#ai-brief" class="ai-card__cta">
+              <svg class="icon ai-card__spark"><use href="#i-spark"/></svg>
+              <span>เริ่มออกแบบป้ายด้วย AI</span>
+              <svg class="icon ai-card__arrow"><use href="#i-arrow"/></svg>
+            </a>
+          </article>
         </div>
       </div>
     </section>
@@ -280,26 +314,71 @@
     <section class="section" id="ai-brief">
       <div class="container">
         <div class="section__head reveal">
-          <span class="eyebrow">บรีฟงานด้วย AI</span>
-          <h2 class="section__title">เล่าไอเดียป้ายของคุณ ให้ AI ช่วยสรุปบรีฟ</h2>
-          <p class="section__lead">กรอกเท่าที่รู้ก็พอ AI จะสรุปบรีฟ แนะนำแนวทางการออกแบบ และบอกข้อมูลที่ควรเตรียมเพิ่ม จากนั้นส่งบรีฟให้ทีมงานทาง LINE ได้ทันที</p>
+          <span class="eyebrow">บรีฟงานด้วย AI + ประเมินราคา</span>
+          <h2 class="section__title">เล่าไอเดียป้ายของคุณ ให้ AI สรุปบรีฟและประเมินราคา</h2>
+          <p class="section__lead">กรอกเท่าที่รู้ก็พอ AI จะสรุปบรีฟและแนวทางการออกแบบ พร้อมราคาประเมินเบื้องต้นจากสูตรราคาจริงของร้าน จากนั้นทักทีมงานทาง LINE เพื่อรับราคาสุทธิ</p>
         </div>
 
         <div class="brief reveal">
           <form class="brief__form" id="briefForm" novalidate>
             <div class="brief__grid">
-              <div class="field">
+              <div class="field field--full">
                 <label for="bf-shopName">ชื่อร้าน / แบรนด์</label>
                 <input id="bf-shopName" name="shopName" type="text" maxlength="120" placeholder="เช่น ร้านกาแฟบ้านสวน">
-              </div>
-              <div class="field">
-                <label for="bf-size">ขนาดป้าย</label>
-                <input id="bf-size" name="size" type="text" maxlength="120" placeholder="เช่น 3 x 1 เมตร">
               </div>
               <div class="field field--full">
                 <label for="bf-signText">ข้อความบนป้าย</label>
                 <textarea id="bf-signText" name="signText" rows="2" maxlength="300" placeholder="เช่น BAAN SUAN CAFÉ · เปิดทุกวัน 07:00–18:00"></textarea>
               </div>
+
+              <p class="brief__group field--full">ประเมินราคาป้ายของคุณ</p>
+              <div class="field">
+                <label for="bf-width">ความกว้าง (เซนติเมตร)</label>
+                <input id="bf-width" name="widthCm" type="number" inputmode="decimal" min="1" max="3000" step="0.1" placeholder="เช่น 120" data-price>
+              </div>
+              <div class="field">
+                <label for="bf-height">ความสูง (เซนติเมตร)</label>
+                <input id="bf-height" name="heightCm" type="number" inputmode="decimal" min="1" max="3000" step="0.1" placeholder="เช่น 60" data-price>
+              </div>
+              <div class="field">
+                <label for="bf-material">วัสดุ</label>
+                <select id="bf-material" name="material" data-price>
+                  <option selected>พลาสวูด</option>
+                  <option>ฟิวเจอร์บอร์ด</option>
+                  <option>อะคริลิก</option>
+                  <option>สแตนเลส / โลหะ</option>
+                  <option>ไม้</option>
+                  <option>ไวนิล</option>
+                  <option>ซิงค์ / อลูมิเนียมคอมโพสิต</option>
+                  <option>ยังไม่แน่ใจ ให้ช่วยแนะนำ</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="bf-layers">จำนวนชั้น</label>
+                <select id="bf-layers" name="layers" data-price>
+                  <option value="1" selected>1 ชั้น</option>
+                  <option value="2">2 ชั้น</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="bf-jobType">ประเภทงาน</label>
+                <select id="bf-jobType" name="jobType" data-price>
+                  <option value="standard" selected>ป้ายแผ่นพิมพ์ลาย</option>
+                  <option value="diecut">ไดคัทตัวอักษร</option>
+                  <option value="cutout">ฉลุลาย</option>
+                  <option value="acrylic_overlay">พลาสวูดประกบอะคริลิกใส</option>
+                </select>
+              </div>
+              <fieldset class="field">
+                <legend>ระบบไฟ</legend>
+                <div class="chips">
+                  <label class="chip"><input type="radio" name="lighting" value="none" checked data-price><span>ไม่ติดไฟ</span></label>
+                  <label class="chip"><input type="radio" name="lighting" value="white" data-price><span>ไฟสีขาว</span></label>
+                  <label class="chip"><input type="radio" name="lighting" value="warm" data-price><span>ไฟวอร์มไวท์</span></label>
+                </div>
+              </fieldset>
+
+              <p class="brief__group field--full">รายละเอียดการออกแบบ</p>
               <div class="field">
                 <label for="bf-colors">โทนสี</label>
                 <input id="bf-colors" name="colors" type="text" maxlength="120" placeholder="เช่น เขียวเข้ม + ไม้ธรรมชาติ">
@@ -318,26 +397,6 @@
                 </select>
               </div>
               <div class="field">
-                <label for="bf-material">วัสดุ</label>
-                <select id="bf-material" name="material">
-                  <option value="">ยังไม่แน่ใจ ให้ช่วยแนะนำ</option>
-                  <option>อะคริลิก</option>
-                  <option>สแตนเลส / โลหะ</option>
-                  <option>ไม้</option>
-                  <option>ไวนิล</option>
-                  <option>ซิงค์ / อลูมิเนียมคอมโพสิต</option>
-                  <option>ฟิวเจอร์บอร์ด / พลาสวูด</option>
-                </select>
-              </div>
-              <fieldset class="field">
-                <legend>ติดไฟหรือไม่</legend>
-                <div class="chips">
-                  <label class="chip"><input type="radio" name="lighting" value="ติดไฟ"><span>ติดไฟ</span></label>
-                  <label class="chip"><input type="radio" name="lighting" value="ไม่ติดไฟ"><span>ไม่ติดไฟ</span></label>
-                  <label class="chip"><input type="radio" name="lighting" value="ยังไม่แน่ใจ" checked><span>ยังไม่แน่ใจ</span></label>
-                </div>
-              </fieldset>
-              <div class="field">
                 <label for="bf-budget">งบประมาณ</label>
                 <input id="bf-budget" name="budget" type="text" maxlength="80" placeholder="เช่น 15,000 บาท">
               </div>
@@ -352,26 +411,142 @@
             </div>
             <p class="brief__error" id="briefError" role="alert" hidden></p>
             <button type="submit" class="btn btn--primary btn--lg brief__submit" id="briefSubmit">
-              <svg class="icon"><use href="#i-check"/></svg> <span>ให้ AI สรุปบรีฟ</span>
+              <svg class="icon"><use href="#i-check"/></svg> <span>สรุปบรีฟและประเมินราคา</span>
             </button>
           </form>
 
           <div class="brief__result" id="briefResult" aria-live="polite">
             <div class="brief__empty" id="briefEmpty">
               <span class="brief__empty-icon" aria-hidden="true">AI</span>
-              <p>ผลสรุปบรีฟจะแสดงที่นี่<br>กรอกข้อมูลทางซ้าย แล้วกด "ให้ AI สรุปบรีฟ"</p>
+              <p>ราคาประเมินและสรุปบรีฟจะแสดงที่นี่<br>กรอกข้อมูลทางซ้าย แล้วกด "สรุปบรีฟและประเมินราคา"</p>
             </div>
             <div class="brief__output" id="briefOutput" hidden>
-              <h3>สรุปบรีฟงาน</h3>
-              <p id="briefSummary"></p>
-              <h3>แนวทางการออกแบบ</h3>
-              <ul class="brief__list" id="briefDesign"></ul>
-              <h3>ข้อมูลที่ยังขาด</h3>
-              <ul class="brief__list brief__list--missing" id="briefMissing"></ul>
+              <div class="quote" id="quote">
+                <p class="quote__label">ราคาประเมินเบื้องต้น</p>
+                <p class="quote__price" id="quotePrice"></p>
+                <p class="quote__review" id="quoteReview" hidden></p>
+                <dl class="quote__spec" id="quoteSpec"></dl>
+              </div>
+
+              <div class="promo promo--quality">
+                <p class="promo__title">✨ ป้ายสวย คุณภาพดี ในราคาคุ้มค่า</p>
+                <p class="promo__text" id="qualityText">คัดสรรวัสดุคุณภาพ ใส่ใจทุกขั้นตอนการผลิต</p>
+              </div>
+
+              <div class="promo promo--offer">
+                <p class="promo__title">✨ ถูกใจแบบนี้? สั่งผลิตกับเรารับข้อเสนอพิเศษ!</p>
+                <p class="promo__text">มีส่วนลดเพิ่มเติมสำหรับลูกค้าที่ตัดสินใจสั่งผลิต ทักแชตเพื่อรับราคาสุทธิจากทีมงานได้เลย</p>
+              </div>
+
               <a href="#" class="btn btn--line btn--lg brief__send js-line-link" id="briefSend" target="_blank" rel="noopener">
-                <svg class="icon"><use href="#i-line"/></svg> คัดลอกบรีฟและส่งทาง LINE
+                <svg class="icon"><use href="#i-line"/></svg> รับข้อเสนอพิเศษผ่าน LINE
               </a>
-              <p class="brief__note" id="briefNote">ผลจาก AI เป็นแนวทางเบื้องต้น ทีมงานจะยืนยันรายละเอียดและราคาให้อีกครั้ง</p>
+              <p class="brief__note" id="briefNote">กดปุ่มแล้วระบบจะคัดลอกสรุปงานให้ วางในแชต LINE เพื่อส่งให้ทีมงาน</p>
+              <p class="quote__note" id="quoteNote">ราคาประเมินอาจเปลี่ยนแปลงตามรายละเอียดงานจริง • ยังไม่รวมค่าจัดส่ง</p>
+
+              <div class="brief__ai" id="briefAi">
+                <h3>สรุปบรีฟงาน</h3>
+                <p id="briefSummary"></p>
+                <h3>แนวทางการออกแบบ</h3>
+                <ul class="brief__list" id="briefDesign"></ul>
+                <h3>ข้อมูลที่ยังขาด</h3>
+                <ul class="brief__list brief__list--missing" id="briefMissing"></ul>
+                <p class="brief__note">ผลจาก AI เป็นแนวทางเบื้องต้น ทีมงานจะยืนยันรายละเอียดอีกครั้ง</p>
+              </div>
+              <p class="brief__error" id="briefAiError" role="alert" hidden></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ========== AI ออกแบบภาพป้าย (ต้องล็อกอิน) ========== -->
+        <div class="aidesign reveal" id="ai-design" hidden>
+          <div class="aidesign__head">
+            <div>
+              <span class="eyebrow">ออกแบบภาพป้ายด้วย AI</span>
+              <h3 class="aidesign__title">สร้าง Artwork และภาพจำลองหน้าร้าน</h3>
+              <p class="aidesign__lead">ใช้ข้อมูลจากฟอร์มด้านบน เลือกภาพอ้างอิงได้สูงสุด 3 ภาพ สมาชิกทดลองสร้างฟรี 1 ครั้ง (Artwork + Mockup)</p>
+            </div>
+            <p class="aidesign__quota" id="aiQuota" hidden></p>
+          </div>
+
+          <div class="aidesign__block">
+            <h4>เลือกจากผลงาน SIGN VERSE <small id="refCount">(เลือกแล้ว 0/3)</small></h4>
+            <div class="refgal" id="refGallery">
+              <p class="refgal__empty" id="refEmpty">กำลังโหลดผลงาน…</p>
+            </div>
+            <div class="refpicked" id="refPicked" hidden></div>
+          </div>
+
+          <div class="aidesign__uploads">
+            <div class="aidesign__block">
+              <h4>อัปโหลดภาพอ้างอิงของคุณ <small>(ไม่บังคับ · JPG, PNG, WebP)</small></h4>
+              <label class="dropzone">
+                <input type="file" id="refUpload" accept="image/jpeg,image/png,image/webp" multiple>
+                <span>+ เพิ่มภาพอ้างอิง</span>
+              </label>
+              <div class="thumbs" id="refUploadList"></div>
+            </div>
+            <div class="aidesign__block">
+              <h4>รูปหน้าร้านของคุณ <small>(ไม่บังคับ · ใช้สร้าง Mockup)</small></h4>
+              <label class="dropzone">
+                <input type="file" id="storefrontUpload" accept="image/jpeg,image/png,image/webp">
+                <span>+ เพิ่มรูปหน้าร้าน</span>
+              </label>
+              <div class="thumbs" id="storefrontList"></div>
+            </div>
+          </div>
+
+          <div id="turnstileBox" class="aidesign__turnstile" hidden></div>
+          <p class="brief__error" id="aiError" role="alert" hidden></p>
+          <p class="aidesign__notice" id="aiNotice" hidden></p>
+          <button type="button" class="btn btn--primary btn--lg aidesign__go" id="aiGenerate">
+            <svg class="icon"><use href="#i-spark"/></svg> <span>สร้างภาพป้ายด้วย AI ฟรี</span>
+          </button>
+          <ol class="aisteps" id="aiSteps" hidden>
+            <li data-step="check">กำลังตรวจสอบข้อมูล</li>
+            <li data-step="style">กำลังวิเคราะห์สไตล์</li>
+            <li data-step="artwork">กำลังสร้าง Artwork</li>
+            <li data-step="mockup">กำลังสร้าง Mockup</li>
+            <li data-step="done">สร้างภาพสำเร็จ</li>
+          </ol>
+
+          <div class="airesult" id="aiResult" hidden>
+            <div class="airesult__tabs" role="tablist">
+              <button type="button" role="tab" class="airesult__tab is-active" data-tab="artwork" aria-selected="true">Artwork หน้าตรง</button>
+              <button type="button" role="tab" class="airesult__tab" data-tab="mockup" aria-selected="false">Mockup หน้าร้าน</button>
+            </div>
+            <div class="airesult__panel" data-panel="artwork">
+              <div class="airesult__view"><canvas id="artworkCanvas" width="1700" height="1150" aria-label="ภาพ Artwork พร้อมขนาดป้าย"></canvas></div>
+              <p class="airesult__cap">ภาพตัวอย่างสำหรับประกอบการสั่งผลิตกับ SIGN VERSE</p>
+              <div class="airesult__actions">
+                <button type="button" class="btn btn--outline" data-act="zoom" data-target="artwork">ขยายภาพ</button>
+                <button type="button" class="btn btn--outline" data-act="download" data-target="artwork">ดาวน์โหลด PNG</button>
+                <button type="button" class="btn btn--outline" data-act="retry" data-target="artwork" hidden>สร้างภาพนี้อีกครั้ง</button>
+              </div>
+            </div>
+            <div class="airesult__panel" data-panel="mockup" hidden>
+              <div class="airesult__view"><img id="mockupImg" alt="ภาพจำลองป้ายติดตั้งหน้าร้าน"></div>
+              <p class="airesult__cap">ภาพตัวอย่างสำหรับประกอบการสั่งผลิตกับ SIGN VERSE</p>
+              <div class="airesult__actions">
+                <button type="button" class="btn btn--outline" data-act="zoom" data-target="mockup">ขยายภาพ</button>
+                <button type="button" class="btn btn--outline" data-act="download" data-target="mockup">ดาวน์โหลด</button>
+                <button type="button" class="btn btn--outline" data-act="retry" data-target="mockup" hidden>สร้างภาพนี้อีกครั้ง</button>
+              </div>
+            </div>
+            <p class="airesult__warn">โปรดตรวจสอบการสะกดชื่อร้านและข้อความบนป้าย ภาพจาก AI เป็นแบบร่างเพื่อประกอบการตัดสินใจ ยังไม่ใช่ไฟล์สำหรับผลิตจริง</p>
+            <button type="button" class="btn btn--line btn--lg airesult__line" id="aiOrder" hidden>
+              <svg class="icon"><use href="#i-line"/></svg> <span>สั่งผลิตป้ายนี้</span>
+            </button>
+            <div class="order" id="orderBox" hidden>
+              <p class="order__no">เลขออร์เดอร์ของคุณ <strong id="orderNo"></strong></p>
+              <p class="order__status" id="orderStatus" role="status"></p>
+              <ol class="order__steps" id="orderSteps"></ol>
+              <pre class="order__text" id="orderText"></pre>
+              <div class="order__actions">
+                <a class="btn btn--line btn--lg" id="orderOpenLine" href="#" target="_blank" rel="noopener"><svg class="icon"><use href="#i-line"/></svg> เปิดแชต LINE @signverse</a>
+                <button type="button" class="btn btn--outline btn--lg" id="orderCopy">คัดลอกข้อความ</button>
+              </div>
+              <p class="brief__note" id="orderNote">ระบบยังไม่ได้ส่งข้อความแทนคุณ — กรุณากดส่งในแชต LINE เพื่อยืนยันคำสั่งผลิต</p>
             </div>
           </div>
         </div>
@@ -600,7 +775,48 @@
     <a href="#" class="btn btn--line js-line-link" target="_blank" rel="noopener"><svg class="icon"><use href="#i-line"/></svg> แอดไลน์ขอราคา</a>
   </div>
 
+
+  <!-- ========== Login Modal ========== -->
+  <div class="modal" id="loginModal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
+      <button type="button" class="modal__close" data-close aria-label="ปิด">×</button>
+      <img src="assets/images/logo-3d.png" alt="" class="modal__logo" width="354" height="400">
+      <h2 class="modal__title" id="loginTitle">เริ่มออกแบบป้ายของคุณด้วย AI</h2>
+      <p class="modal__text">สมัครสมาชิกหรือเข้าสู่ระบบ เพื่อทดลองสร้าง Artwork และภาพจำลองหน้าร้านฟรี 1 ครั้ง</p>
+      <div class="modal__providers" id="loginProviders"></div>
+      <p class="modal__pending" id="loginPending" hidden>ระบบเข้าสู่ระบบกำลังรอเปิดใช้งาน ระหว่างนี้ทักทีมงานทาง LINE ได้เลย</p>
+      <p class="brief__error" id="loginError" role="alert" hidden></p>
+      <p class="modal__foot">กรอกข้อมูลและประเมินราคาเบื้องต้นได้ฟรี โดยไม่ต้องสมัครสมาชิก</p>
+      <button type="button" class="modal__back" data-close>กลับไปกรอกข้อมูล</button>
+    </div>
+  </div>
+
+  <!-- ========== ใช้สิทธิ์ฟรีครบแล้ว ========== -->
+  <div class="modal" id="quotaModal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="quotaTitle">
+      <button type="button" class="modal__close" data-close aria-label="ปิด">×</button>
+      <h2 class="modal__title" id="quotaTitle">คุณใช้สิทธิ์ทดลองออกแบบฟรีครบแล้ว</h2>
+      <p class="modal__text">ชอบแบบนี้และอยากออกแบบเพิ่มเติม?<br>ทีม SIGN VERSE พร้อมช่วยปรับแบบให้เหมาะกับร้านของคุณ</p>
+      <a href="#" class="btn btn--line btn--lg modal__cta js-line-link" target="_blank" rel="noopener"><svg class="icon"><use href="#i-line"/></svg> ปรึกษาทีมออกแบบผ่าน LINE</a>
+      <button type="button" class="btn btn--outline modal__cta" id="quotaViewMine">ดูแบบที่สร้างไว้</button>
+    </div>
+  </div>
+
+  <!-- ========== ดูภาพขนาดใหญ่ ========== -->
+  <div class="modal modal--zoom" id="zoomModal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <div class="modal__box modal__box--zoom" role="dialog" aria-modal="true" aria-label="ภาพขนาดใหญ่">
+      <button type="button" class="modal__close" data-close aria-label="ปิด">×</button>
+      <img id="zoomImg" alt="">
+      <p class="modal__cap" id="zoomCap"></p>
+    </div>
+  </div>
+
   <script src="js/main.js"></script>
   <script src="js/ai-brief.js"></script>
+  <script src="js/account.js"></script>
+  <script src="js/ai-design.js"></script>
 </body>
 </html>

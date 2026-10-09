@@ -21,6 +21,13 @@ css/style.css     ดีไซน์ทั้งหมด ใช้ CSS variable
 js/main.js        เมนูมือถือ, header ตอน scroll, FAQ accordion, ตัวกรองผลงาน, fade-in
 js/ai-brief.js    ฟอร์มบรีฟงานป้าย → เรียก /api/ai-brief แล้วแสดงผล
 api/ai-brief.js   Vercel Serverless Function เรียก OpenAI (ใช้ env OPENAI_API_KEY)
+api/estimate-price.js  ประเมินราคาป้ายจากสูตรร้าน (ใช้ env PRICING_CONFIG)
+api/_lib/*.mjs         auth, jobs (quota), repo-pg/memory, storage, images, http, context
+api/_lib/pricing.js    เครื่องคำนวณราคา — จำลองสูตร Excel ทีละขั้น ไม่มีตัวเลขในโค้ด
+tools/extract-pricing-config.py  ดึงค่าจาก Excel → private/ (ข้อมูลลับ)
+tests/pricing.test.js  ทดสอบราคาเทียบ Excel (node --test tests/)
+PRICING_AUDIT.md  ผลตรวจสูตรราคาและคำถามที่ต้องยืนยัน
+private/          ⚠️ ข้อมูลลับ (config ราคา + fixtures) — .gitignore และ .vercelignore
 .env.example      ตัวอย่าง Environment Variables
 assets/images/    รูปโลโก้/ผลงานจริง (ตอนนี้ยังว่าง ใช้กราฟิก CSS แทน)
 ```
@@ -63,6 +70,32 @@ Breakpoints: `640px`, `960px` (min-width)
 - `OPENAI_MODEL` (ไม่บังคับ) เปลี่ยนโมเดลได้ ค่าเริ่มต้นอยู่ใน `api/ai-brief.js`
 - แสดงผล AI ด้วย `textContent` เท่านั้น ห้ามใช้ `innerHTML`
 - ฟีเจอร์นี้ไม่ทำงานเมื่อเปิด `index.html` แบบ file:// — ต้องใช้ Vercel หรือ `vercel dev`
+
+## ระบบประเมินราคา (`/api/estimate-price`)
+- **repo เป็นสาธารณะ** — ห้ามใส่ต้นทุน ตัวคูณ ค่าบริการ หรือไฟล์ Excel ในโค้ด/ไฟล์ที่ commit
+- ค่าทั้งหมดอยู่ใน `PRICING_CONFIG` (Vercel env) / `private/pricing-config.json` (local, ignored)
+- ห้ามเปลี่ยนสูตรราคาเอง สูตรต้องตรงกับ Excel (ตรวจด้วย fixtures ใน `private/`)
+- สูตรที่ยังไม่ยืนยัน `enabled: false` → API ตอบ `needs_review` ห้ามแสดงราคาสมมติหรือ 0 บาท
+- ห้ามแสดง/คำนวณส่วนลดให้ลูกค้า ส่วนลดให้พนักงานเสนอผ่าน LINE เท่านั้น
+- ข้อความคุณภาพ/ข้อเสนอพิเศษใช้ถ้อยคำตามที่เจ้าของร้านกำหนด ห้ามเพิ่มคำรับประกัน
+- ข้อความ "พิมพ์ UV" แสดงเฉพาะสูตรที่ `uvPrint: true` ใน `api/_lib/pricing.js`
+- เปลี่ยนขนาด/วัสดุหลังได้ผล → เรียกเฉพาะ estimate-price ไม่เรียก AI ซ้ำ
+
+## ระบบสมาชิก / โควตา AI / หลังบ้าน (ดู docs/SETUP.md)
+- Auth: **Better Auth** (`api/_lib/auth.mjs`, `api/auth/[...all].mjs`) — Google/LINE/Facebook, ไม่มีรหัสผ่าน, role: customer/staff/admin (`input:false`)
+- DB: Neon (`db/schema.sql`), repo: `api/_lib/repo-pg.mjs` (จริง) / `repo-memory.mjs` (mock+tests) อินเทอร์เฟซเดียวกัน
+- Storage: Blob Private (ภาพลูกค้า/AI/ต้นฉบับผลงาน) + Public (เฉพาะผลงานที่เผยแพร่) — `api/_lib/storage.mjs`; อ่าน private ผ่าน `/api/files` ที่ตรวจสิทธิ์เท่านั้น
+- Quota/Job state machine: `api/_lib/jobs.mjs` (1 สิทธิ์ = Artwork+Mockup, idempotency key, refund rules) — แก้ต้องรัน `tests/jobs.test.mjs`
+- API (Hobby จำกัด 12 functions — ตอนนี้ 11): me, gallery, upload, ai, files, admin, cron-cleanup, auth, ai-brief, estimate-price, line/webhook
+- LINE OA @signverse (คำสั่งผลิต): ลูกค้ากด "สั่งผลิตป้ายนี้" → บันทึก `production_orders` (เลขออร์เดอร์ + claim_code) → `oaMessage` ให้ลูกค้ากดส่งเอง → `api/line/webhook.mjs` ตรวจลายเซ็น → `api/_lib/delivery.mjs` reply รูปกลับในแชตเดียวกัน (ครั้งเดียว, ผูก LINE userId) · ทาง B: `liff/order.html` (`liff.sendMessages`, ตรวจ ID token) · สถานะการส่ง `line_delivery_status` แยกจาก `status` การผลิต
+- Mock AI ใช้ PNG ตัวอย่าง (`api/_lib/fixtures/`) เพราะ LINE รับเฉพาะ PNG/JPEG · `FILE_SIGNING_SECRET` ต้องเป็นค่าเฉพาะ ≥32 ตัว (ไม่มี = ไม่ส่งรูป) · `push` ถูกปิดที่ `context.mjs` เมื่อระบบกลุ่มปิด
+- ระบบส่งเข้ากลุ่ม LINE พนักงาน (เดิม) ปิดไว้ — เปิดเฉพาะ `LINE_GROUP_ORDERS_ENABLED=true`; ห้ามเรียก LINE จริงในการทดสอบ (tests บล็อก fetch)
+- โค้ดใหม่ฝั่ง server เป็น ESM `.mjs`; ไฟล์เดิม `.js` เป็น CommonJS — อย่าเพิ่ม `"type": "module"` ใน package.json
+- AI จริงยังไม่เปิด (`ctx.ai` = null) จนกว่าจะมีลายน้ำฝั่ง Server; ใช้ `api/_lib/ai-mock.mjs`
+- `MOCK_SERVICES=1` ห้ามใช้บน Production (ระบบปฏิเสธ)
+- หน้าเว็บ: `js/account.js` (login modal), `js/ai-design.js` (gallery picker, uploads, generate, canvas ขนาด), หลังบ้าน `admin/`
+- ทดสอบ: `ELECTRON_RUN_AS_NODE=1 "/Applications/Cursor.app/Contents/MacOS/Cursor" --test tests/*.test.*` (เครื่องนี้ไม่มี Node แยก)
+- Dev server mock: `tools/dev-server.mjs`
 
 ## วิธีเปิดดู
 เปิด `index.html` ในเบราว์เซอร์โดยตรง หรือ

@@ -3,3 +3,11 @@
 .env
 .env*.local
 .vercel
+
+# SIGN VERSE - Confidential Pricing
+**/Punch คำนวนราคา.xlsx
+
+# Private pricing data (costs, multipliers, Excel fixtures) — never commit
+private/
+*.xlsx
+node_modules/

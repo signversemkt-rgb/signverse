@@ -1,5 +1,20 @@
 {
   "functions": {
-    "api/ai-brief.js": { "maxDuration": 30 }
-  }
+    "api/ai-brief.js": { "maxDuration": 30 },
+    "api/ai.mjs": { "maxDuration": 300 },
+    "api/admin.mjs": { "maxDuration": 60 }
+  },
+  "crons": [
+    { "path": "/api/cron-cleanup", "schedule": "0 20 * * *" }
+  ],
+  "headers": [
+    {
+      "source": "/admin/(.*)",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "same-origin" }
+      ]
+    }
+  ]
 }

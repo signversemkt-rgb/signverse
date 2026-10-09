@@ -14,6 +14,8 @@ const FIELDS = {
   colors: { label: "โทนสี", max: 120 },
   style: { label: "สไตล์", max: 120 },
   material: { label: "วัสดุ", max: 120 },
+  layers: { label: "จำนวนชั้น", max: 20 },
+  jobType: { label: "ประเภทงาน", max: 60 },
   lighting: { label: "ติดไฟหรือไม่", max: 40 },
   budget: { label: "งบประมาณ", max: 80 },
   deadline: { label: "วันที่ต้องการ", max: 40 },

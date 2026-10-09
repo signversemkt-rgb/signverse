@@ -1,0 +1,11 @@
+# ไฟล์ภายในที่ไม่ต้องการให้เปิดดูได้บนเว็บ (Vercel จะไม่อัปโหลดไฟล์เหล่านี้)
+private/
+*.xlsx
+tools/
+tests/
+CLAUDE.md
+PRICING_AUDIT.md
+.env*
+node_modules/
+db/
+docs/

@@ -1,0 +1,151 @@
+// ประกอบบริการตาม Environment Variables
+//   MOCK_SERVICES=1 → ฐานข้อมูล/ไฟล์/AI/ล็อกอินแบบจำลองในหน่วยความจำ (ห้ามใช้บน Production — ระบบปฏิเสธเอง)
+//   ไม่ใช่ mock    → Neon + Vercel Blob + Better Auth (ต้องตั้งค่าครบ ไม่งั้นตอบ not_configured)
+import { HttpError, allowedOrigins } from "./http.mjs";
+import { createMemoryRepo } from "./repo-memory.mjs";
+import { createMemoryStorage } from "./storage.mjs";
+import { createMockProvider } from "./ai-mock.mjs";
+import { enabledProviders, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
+import { createLineClient } from "./line.mjs";
+
+const int = (v, d) => {
+  const n = Number.parseInt(v ?? "", 10);
+  return Number.isFinite(n) ? n : d;
+};
+
+let cached = null;
+
+export function newId() {
+  return globalThis.crypto.randomUUID().replace(/-/g, "");
+}
+
+export async function getContext(env = process.env) {
+  if (cached && cached.env === env) return cached;
+  const mock = env.MOCK_SERVICES === "1";
+  if (mock && env.VERCEL_ENV === "production") throw new HttpError(503, "not_configured");
+
+  const ctx = {
+    env,
+    mock,
+    uuid: newId,
+    config: {
+      defaultCredits: int(env.AI_FREE_CREDITS, 1),
+      dailyLimit: int(env.AI_DAILY_JOB_LIMIT, 20),
+      retentionDays: int(env.CUSTOMER_FILE_RETENTION_DAYS, 90),
+      tempUploadHours: int(env.TEMP_UPLOAD_HOURS, 24),
+      trashDays: int(env.GALLERY_TRASH_DAYS, 30),
+      origins: allowedOrigins(env),
+      turnstileSecret: env.TURNSTILE_SECRET_KEY || "",
+      turnstileSiteKey: env.TURNSTILE_SITE_KEY || "",
+      baseUrl: (env.BETTER_AUTH_URL || env.APP_ORIGIN || "").replace(/\/$/, ""),
+      lineChannelSecret: env.LINE_CHANNEL_SECRET || (mock ? "mock-line-channel-secret" : ""),
+      // ลายเซ็นลิงก์รูปให้ LINE ดึง — ต้องเป็นค่าเฉพาะ (≥32 ตัว) ไม่ยืม secret อื่น · ไม่มี = ไม่ส่งรูป (ส่งข้อความอย่างเดียว)
+      fileSigningSecret: env.FILE_SIGNING_SECRET || (mock ? "mock-file-signing-secret-0123456789abcdef" : ""),
+      fileUrlTtlSec: Math.min(60, Math.max(1, int(env.FILE_URL_TTL_DAYS, 30))) * 86400,
+      lineStaffGroupEnv: env.LINE_STAFF_GROUP_ID || "",
+      lineOaId: env.LINE_OA_ID || "@signverse",          // LINE OA ที่พนักงานตอบแชตลูกค้า
+      // ระบบสั่งผลิตผ่าน LINE OA: off (ค่าเริ่มต้น) | staff (เฉพาะบัญชีพนักงานทดสอบ) | on (ลูกค้าทุกคน)
+      lineOrdersMode: ["staff", "on"].includes(env.LINE_ORDERS_ENABLED) ? env.LINE_ORDERS_ENABLED : (mock && env.LINE_ORDERS_ENABLED !== "off" ? "on" : "off"),
+      // ระบบส่งเข้ากลุ่ม LINE พนักงาน: ปิดเป็นค่าเริ่มต้น (ต้องตั้ง "true" ตรง ๆ เท่านั้นถึงจะเปิด)
+      lineGroupOrdersEnabled: env.LINE_GROUP_ORDERS_ENABLED === "true",
+      liffId: env.LIFF_ID || "",                          // เปิดเผยได้ (ใช้ฝั่งหน้า LIFF)
+      liffChannelId: env.LINE_LOGIN_CHANNEL_ID || "",     // ใช้ตรวจ LIFF ID token ฝั่ง Server
+    },
+    providers: mock ? ["google", "line", "facebook"] : enabledProviders(env),
+    repo: null,
+    storage: null,
+    ai: null,
+  };
+
+  if (mock) {
+    ctx.repo = createMemoryRepo({ uuid: newId });
+    ctx.storage = createMemoryStorage({ uuid: newId });
+    ctx.ai = createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" });
+    ctx.getSession = async (req) => {
+      const m = /(?:^|;\s*)sv_mock_user=([A-Za-z0-9_-]+)/.exec(req.headers.cookie || "");
+      return m ? ctx.repo.getUser(m[1]) : null;
+    };
+  } else {
+    if (env.DATABASE_URL) {
+      const [{ Pool }, { createPgRepo }] = await Promise.all([import("@neondatabase/serverless"), import("./repo-pg.mjs")]);
+      ctx.repo = createPgRepo({ Pool, connectionString: env.DATABASE_URL, uuid: newId });
+    }
+    if (env.PRIVATE_BLOB_READ_WRITE_TOKEN && env.PUBLIC_BLOB_READ_WRITE_TOKEN) {
+      const [blob, { createVercelStorage }] = await Promise.all([import("@vercel/blob"), import("./storage.mjs")]);
+      ctx.storage = createVercelStorage({ blob, privateToken: env.PRIVATE_BLOB_READ_WRITE_TOKEN, publicToken: env.PUBLIC_BLOB_READ_WRITE_TOKEN });
+    }
+    // AI จริงยังไม่เปิด: ต้องมีระบบลายน้ำฝั่ง Server ก่อน (รออนุมัติแพ็กเกจประมวลผลภาพ)
+    // AI_PROVIDER=mock ใช้ทดสอบบน Preview ได้โดยไม่มีค่าใช้จ่าย
+    ctx.ai = env.AI_PROVIDER === "mock" ? createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" }) : null;
+    ctx.getSession = async (req) => {
+      const auth = await getAuth(env);
+      return auth ? sessionFromRequest(auth, req) : null;
+    };
+  }
+  // LINE Messaging API: mock เมื่อ MOCK_SERVICES=1 หรือ LINE_MOCK=1 (ไม่เรียก LINE จริง)
+  ctx.line = createLineClient({ accessToken: env.LINE_CHANNEL_ACCESS_TOKEN, mock: mock || env.LINE_MOCK === "1" });
+  // ชั้นป้องกันที่ 2: push ใช้ได้เฉพาะระบบกลุ่ม (ปิดอยู่) → ปิดที่ระดับ client ด้วย กันโค้ดส่วนอื่นเรียกโดยไม่ตั้งใจ
+  if (ctx.line && !ctx.config.lineGroupOrdersEnabled) {
+    ctx.line.push = async () => { throw new HttpError(403, "feature_disabled"); };
+  }
+  ctx.authReady = mock || authConfigured(env);
+  cached = ctx;
+  return ctx;
+}
+
+export function need(ctx, ...parts) {
+  for (const p of parts) if (!ctx[p]) throw new HttpError(503, "not_configured");
+}
+
+export async function requireUser(ctx, req) {
+  const user = await ctx.getSession(req);
+  if (!user) throw new HttpError(401, "unauthenticated");
+  if (user.accountStatus === "suspended") throw new HttpError(403, "suspended");
+  return user;
+}
+
+export async function requireStaff(ctx, req) {
+  const user = await requireUser(ctx, req);
+  if (user.role !== "staff" && user.role !== "admin") throw new HttpError(403, "forbidden");
+  return user;
+}
+
+export async function requireAdmin(ctx, req) {
+  const user = await requireUser(ctx, req);
+  if (user.role !== "admin") throw new HttpError(403, "forbidden");
+  return user;
+}
+
+export async function rateLimit(ctx, key, limit, windowSec) {
+  if (!ctx.repo) return;
+  if (!(await ctx.repo.hitRateLimit(key, limit, windowSec))) throw new HttpError(429, "rate_limited");
+}
+
+// Cloudflare Turnstile (เปิดเมื่อมี TURNSTILE_SECRET_KEY เท่านั้น)
+export async function verifyTurnstile(ctx, token, ip) {
+  if (!ctx.config.turnstileSecret) return;
+  if (!token) throw new HttpError(400, "bot_check_failed");
+  const body = new URLSearchParams({ secret: ctx.config.turnstileSecret, response: String(token), remoteip: ip });
+  const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", body });
+  const data = await r.json().catch(() => ({}));
+  if (!data.success) throw new HttpError(400, "bot_check_failed");
+}
+
+// กลุ่มพนักงานที่ผูกแล้ว (ผูกผ่านรหัสจากหลังบ้าน) — ค่าใน env ใช้เป็นค่าสำรอง
+export async function staffGroup(ctx) {
+  const fromDb = ctx.repo ? await ctx.repo.getSetting("line_staff_group_id") : null;
+  if (fromDb) return { groupId: fromDb, source: "db" };
+  if (ctx.config.lineStaffGroupEnv) return { groupId: ctx.config.lineStaffGroupEnv, source: "env" };
+  return null;
+}
+
+export function maskId(id) {
+  return id ? `${String(id).slice(0, 5)}…${String(id).slice(-4)}` : null;
+}
+
+// ผู้ใช้คนนี้ใช้ระบบสั่งผลิตผ่าน LINE ได้หรือไม่ (ตามช่วงทดลองใช้)
+export function canUseLineOrders(ctx, user) {
+  if (ctx.config.lineOrdersMode === "on") return Boolean(user);
+  if (ctx.config.lineOrdersMode === "staff") return Boolean(user && (user.role === "staff" || user.role === "admin"));
+  return false;
+}

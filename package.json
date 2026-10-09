@@ -1,0 +1,16 @@
+{
+  "name": "signverse-website",
+  "private": true,
+  "description": "SIGN VERSE website — static pages + Vercel Serverless API",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "test": "node --test \"tests/*.test.*\""
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "1.2.0",
+    "@vercel/blob": "2.8.1",
+    "better-auth": "1.7.7"
+  }
+}
