@@ -4,6 +4,9 @@
     "api/ai.mjs": { "maxDuration": 300 },
     "api/admin.mjs": { "maxDuration": 60 }
   },
+  "rewrites": [
+    { "source": "/api/auth/:path*", "destination": "/api/auth" }
+  ],
   "crons": [
     { "path": "/api/cron-cleanup", "schedule": "0 20 * * *" }
   ],

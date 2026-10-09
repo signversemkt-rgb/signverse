@@ -1,5 +1,7 @@
 // Better Auth endpoint: /api/auth/* (sign-in/social, callback/:provider, sign-out, get-session,
 //   phone-number/send-otp, phone-number/verify …)
+// ทุก path ใต้ /api/auth/ ถูก rewrite มาที่ function นี้ใน vercel.json (ไฟล์ [...all] ของ Vercel รับได้แค่ path ชั้นเดียว)
+// req.url ยังเป็น path เดิมที่ลูกค้าเรียก → Better Auth แยกเส้นทางได้ถูกต้อง
 // โหมดทดสอบในเครื่อง (MOCK_SERVICES=1): เบอร์โทร + OTP จำลองที่นี่ (SMS ไม่ถูกส่งจริง · ใช้ไม่ได้บน Production)
 import { getAuth } from "../_lib/auth.mjs";
 import { sendJson, errorBody, readJson, assertSameOrigin, HttpError, getIp } from "../_lib/http.mjs";

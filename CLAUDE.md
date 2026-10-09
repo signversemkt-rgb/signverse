@@ -82,7 +82,7 @@ Breakpoints: `640px`, `960px` (min-width)
 - เปลี่ยนขนาด/วัสดุหลังได้ผล → เรียกเฉพาะ estimate-price ไม่เรียก AI ซ้ำ
 
 ## ระบบสมาชิก / โควตา AI / หลังบ้าน (ดู docs/SETUP.md)
-- Auth: **Better Auth** (`api/_lib/auth.mjs`, `api/auth/[...all].mjs`) — **LINE Login + เบอร์โทร/OTP** (`AUTH_PROVIDERS`, ค่าเริ่มต้น `line,phone`; Google/Facebook ปิด), ไม่มีรหัสผ่าน, role: customer/staff/admin (`input:false`), `disableImplicitLinking` (ไม่รวมบัญชีอัตโนมัติ)
+- Auth: **Better Auth** (`api/_lib/auth.mjs`, `api/auth/index.mjs` + rewrite `/api/auth/:path*` ใน vercel.json) — **LINE Login + เบอร์โทร/OTP** (`AUTH_PROVIDERS`, ค่าเริ่มต้น `line,phone`; Google/Facebook ปิด), ไม่มีรหัสผ่าน, role: customer/staff/admin (`input:false`), `disableImplicitLinking` (ไม่รวมบัญชีอัตโนมัติ)
   - LINE Login ใช้ `LINE_LOGIN_CHANNEL_ID/SECRET` — ห้ามใช้ `LINE_CHANNEL_SECRET` (ของ OA Webhook)
   - OTP: Better Auth `phoneNumber` plugin + `api/_lib/phone.mjs` (hash, 5 นาที, ผิดได้ 5 ครั้ง, ส่งซ้ำ 60 วิ, จำกัดต่อเบอร์/IP/วัน) · SMS: ThaiBulkSMS (`SMS_PROVIDER`) · SMS จำลองใช้ได้เฉพาะ `MOCK_SERVICES=1` (`MOCK_SMS_ECHO=1` แสดงรหัสใน console) · ต้องรัน `db/schema.sql` ก่อนตั้งค่า SMS · แก้ต้องรัน `tests/phone-otp.test.mjs`
 - DB: Neon (`db/schema.sql`), repo: `api/_lib/repo-pg.mjs` (จริง) / `repo-memory.mjs` (mock+tests) อินเทอร์เฟซเดียวกัน
