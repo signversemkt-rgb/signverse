@@ -8,8 +8,9 @@
 //   POST /api/ai {action:"liffOrders"|"liffPrepare"|"liffResult", idToken, …}  → หน้า LIFF (ยืนยันตัวตนด้วย LINE ID token)
 import { route } from "./_lib/route.mjs";
 import { sendJson, readJson, query, HttpError, assertSameOrigin, getIp, cleanText, isId } from "./_lib/http.mjs";
-import { need, requireUser, rateLimit, verifyTurnstile, canUseLineOrders, canUseAi, isCreditExempt } from "./_lib/context.mjs";
-import { createJob, runStep, jobView, quotaView } from "./_lib/jobs.mjs";
+import { need, rateLimit, verifyTurnstile, canUseLineOrders, canUseAi, isCreditExempt, resolveActor } from "./_lib/context.mjs";
+import { createJob, runStep, jobView, quotaView, isJobOwner } from "./_lib/jobs.mjs";
+import { ipHash, dayStart, guestUsage } from "./_lib/guest.mjs";
 import { LIMITS } from "./_lib/images.mjs";
 import { generateOrderNo, generateClaimCode, estimateFromForm, cleanOrderForm, orderView } from "./_lib/orders.mjs";
 import { verifyLiffIdToken, liffListOrders, liffPrepare, liffResult } from "./_lib/delivery.mjs";
@@ -23,7 +24,8 @@ function ids(list, max) {
   return [...new Set(list)];
 }
 
-export async function buildInput(ctx, user, body) {
+// owner = { userId } (สมาชิก) หรือ { guestId } (Guest) — ไฟล์ที่อ้างอิงต้องเป็นของเจ้าของคนเดียวกันเท่านั้น
+export async function buildInput(ctx, owner, body) {
   const src = body.input || {};
   const input = {};
   for (const [k, max] of Object.entries(TEXT_FIELDS)) input[k] = cleanText(src[k], max);
@@ -44,7 +46,8 @@ export async function buildInput(ctx, user, body) {
 
   const storefrontIds = body.storefront ? ids([body.storefront], 1) : [];
   const uploads = await ctx.repo.getUploads([...upIds, ...storefrontIds]);
-  const own = (id, kind) => uploads.find((u) => u.upload_id === id && u.user_id === user.id && u.kind === kind);
+  const own = (id, kind) => uploads.find((u) => u.upload_id === id && u.kind === kind
+    && ((owner.userId && u.user_id === owner.userId) || (owner.guestId && u.guest_id === owner.guestId)));
   if (!upIds.every((id) => own(id, "reference")) || !storefrontIds.every((id) => own(id, "storefront"))) {
     throw new HttpError(400, "invalid_reference");
   }
@@ -52,6 +55,48 @@ export async function buildInput(ctx, user, body) {
   input.referenceUploads = upIds.map((id) => ({ uploadId: id, key: own(id, "reference").storage_key }));
   input.storefront = storefrontIds.length ? { uploadId: storefrontIds[0], key: own(storefrontIds[0], "storefront").storage_key } : null;
   return input;
+}
+
+// ---------- Guest (ไม่ต้องสมัครสมาชิก) — สร้าง/ดูงานของตัวเองเท่านั้น · สั่งผลิตผ่าน LINE OA ของร้านตามเดิม ----------
+async function handleGuest(req, res, ctx, { guestId }) {
+  need(ctx, "storage");
+  if (req.method === "GET") {
+    const q = query(req);
+    if (q.job) {
+      if (!isId(q.job)) throw new HttpError(400, "bad_request");
+      const job = await ctx.repo.getJob(q.job);
+      if (!isJobOwner(job, { guestId })) throw new HttpError(404, "not_found");
+      return sendJson(res, 200, { job: jobView(job) });
+    }
+    if (q.orders) throw new HttpError(401, "unauthenticated");
+    const jobs = await ctx.repo.listJobsByGuest(guestId, 5);
+    return sendJson(res, 200, { jobs: jobs.map(jobView), guest: await guestUsage(ctx, guestId, getIp(req)) });
+  }
+  if (req.method !== "POST") throw new HttpError(405, "bad_request");
+  assertSameOrigin(req, ctx.config.origins);
+  const body = req.body;
+  if (body.action === "create") {
+    const ip = getIp(req);
+    await rateLimit(ctx, `ai-guest:${guestId}`, 10, 3600);           // กันยิงถี่ (เพดานงานจริงตรวจใน createJob)
+    await rateLimit(ctx, `ai-guest-ip:${ip}`, 20, 3600);
+    await verifyTurnstile(ctx, body.turnstileToken, ip);
+    const input = await buildInput(ctx, { guestId }, body);
+    input.provider = ctx.ai.name;
+    const g = ctx.config.guest;
+    const { job, created } = await createJob({
+      repo: ctx.repo, guestId, ipHash: ipHash(ctx, ip), idempotencyKey: body.idempotencyKey, input, uuid: ctx.uuid,
+      guestLimits: g, dayStart: dayStart(),
+    });
+    return sendJson(res, created ? 201 : 200, { job: jobView(job), created, guest: await guestUsage(ctx, guestId, ip) });
+  }
+  if (body.action === "step") {
+    if (!isId(body.jobId)) throw new HttpError(400, "bad_request");
+    await rateLimit(ctx, `ai-guest-step:${guestId}`, 30, 3600);
+    const job = await runStep({ repo: ctx.repo, storage: ctx.storage, provider: ctx.ai, guestId, jobId: body.jobId, step: body.step });
+    return sendJson(res, 200, { job: jobView(job) });
+  }
+  // สั่งผลิตผ่านระบบออร์เดอร์ต้องเป็นสมาชิก — Guest ติดต่อร้านทาง LINE OA ได้ทันที
+  throw new HttpError(401, "unauthenticated");
 }
 
 async function handleLiff(req, res, ctx, body) {
@@ -80,7 +125,11 @@ export default route(async (req, res, ctx) => {
       return handleLiff(req, res, ctx, req.body);
     }
   }
-  const user = await requireUser(ctx, req);
+  // สมาชิก หรือ Guest (GUEST_AI_ENABLED) — ตรวจที่ Server ทุกคำขอ
+  const isCreate = req.method === "POST" && req.body && req.body.action === "create";
+  const actor = await resolveActor(ctx, req, res, { create: isCreate });
+  const { user } = actor;
+  if (!user) return handleGuest(req, res, ctx, actor);
 
   if (req.method === "GET") {
     const q = query(req);
@@ -108,7 +157,7 @@ export default route(async (req, res, ctx) => {
     await rateLimit(ctx, `ai:user:${user.id}`, 10, 3600);
     await rateLimit(ctx, `ai:ip:${getIp(req)}`, 20, 3600);
     await verifyTurnstile(ctx, body.turnstileToken, getIp(req));
-    const input = await buildInput(ctx, user, body);
+    const input = await buildInput(ctx, { userId: user.id }, body);
     input.provider = ctx.ai.name;                        // "mock" = ภาพตัวอย่าง (หน้าเว็บติดป้ายว่าไม่ใช่ AI จริง)
     const { job, created } = await createJob({
       repo: ctx.repo, userId: user.id, idempotencyKey: body.idempotencyKey, input,

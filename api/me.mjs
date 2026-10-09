@@ -4,6 +4,8 @@ import { route } from "./_lib/route.mjs";
 import { sendJson, query, readJson, HttpError, assertSameOrigin } from "./_lib/http.mjs";
 import { quotaView } from "./_lib/jobs.mjs";
 import { canUseAi, canUseLineOrders, aiStatus, aiReadyForCustomers } from "./_lib/context.mjs";
+import { getIp } from "./_lib/http.mjs";
+import { guestAiState, guestUsage, readGuestId } from "./_lib/guest.mjs";
 
 export default route(async (req, res, ctx) => {
   if (req.method === "POST" && ctx.mock) {
@@ -25,13 +27,19 @@ export default route(async (req, res, ctx) => {
   const user = await ctx.getSession(req);
   let quota = null;
   if (user && ctx.repo) quota = quotaView(await ctx.repo.getQuota(user.id, ctx.config.defaultCredits));
+  // Guest: สถานะ + สิทธิ์คงเหลือวันนี้ (ไม่ออก cookie ที่นี่ — ออกตอนสร้างงานจริง)
+  let guest = null;
+  const gState = user ? "off" : guestAiState(ctx);
+  if (gState === "ready") guest = { state: gState, ...(await guestUsage(ctx, readGuestId(ctx, req), getIp(req))) };
+  else if (gState === "coming_soon") guest = { state: gState, remainingToday: 0, paused: false };
   sendJson(res, 200, {
     user: user ? { id: user.id, name: user.name, role: user.role, image: user.image || null } : null,
     quota,
     providers: ctx.authReady ? ctx.providers : [],
     phoneLogin: ctx.authReady ? ctx.phoneLogin : "off",           // ready | coming_soon | off (coming_soon = ยังไม่มีผู้ส่ง SMS จริง)
     aiAvailable: canUseAi(ctx, user),
-    aiStatus: aiStatus(ctx, user),
+    aiStatus: aiStatus(ctx, user, guest),
+    guest,
     aiReady: aiReadyForCustomers(ctx),
     turnstileSiteKey: ctx.config.turnstileSiteKey || null,
     liffId: ctx.config.liffId || null,

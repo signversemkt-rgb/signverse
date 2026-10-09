@@ -250,3 +250,23 @@ CREATE TABLE IF NOT EXISTS phone_otp_requests (
 );
 CREATE INDEX IF NOT EXISTS phone_otp_phone_idx ON phone_otp_requests(phone_hash, created_at DESC);
 CREATE INDEX IF NOT EXISTS phone_otp_created_idx ON phone_otp_requests(created_at);
+
+-- ========== สร้างภาพ AI โดยไม่ต้องสมัครสมาชิก (Guest · GUEST_AI_ENABLED) — เพิ่มเท่านั้น ไม่แก้ข้อมูลเดิม · รันซ้ำได้ ==========
+-- งาน/ไฟล์ของ Guest: user_id = NULL และใช้ guest_id (รหัสสุ่มจาก cookie ที่ลงลายเซ็น) แทน — งานของสมาชิกเดิมไม่เปลี่ยน
+ALTER TABLE ai_jobs ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS guest_id text;
+ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS guest_ip_hash text;          -- HMAC ของ IP (ไม่เก็บ IP จริง) ใช้นับเพดานต่อ IP
+ALTER TABLE ai_jobs DROP CONSTRAINT IF EXISTS ai_jobs_owner_check;
+ALTER TABLE ai_jobs ADD CONSTRAINT ai_jobs_owner_check CHECK (user_id IS NOT NULL OR guest_id IS NOT NULL);
+ALTER TABLE ai_jobs DROP CONSTRAINT IF EXISTS ai_jobs_credit_state_check;
+ALTER TABLE ai_jobs ADD CONSTRAINT ai_jobs_credit_state_check CHECK (credit_state IN ('reserved', 'consumed', 'refunded', 'exempt', 'guest'));
+CREATE UNIQUE INDEX IF NOT EXISTS ai_jobs_guest_idem ON ai_jobs(guest_id, idempotency_key) WHERE guest_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS ai_jobs_guest_one_active ON ai_jobs(guest_id) WHERE guest_id IS NOT NULL AND status IN ('pending', 'processing');
+CREATE INDEX IF NOT EXISTS ai_jobs_guest_idx ON ai_jobs(guest_id, created_at DESC) WHERE guest_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ai_jobs_guest_ip_idx ON ai_jobs(guest_ip_hash, created_at DESC) WHERE guest_ip_hash IS NOT NULL;
+
+ALTER TABLE customer_uploads ALTER COLUMN user_id DROP NOT NULL;
+ALTER TABLE customer_uploads ADD COLUMN IF NOT EXISTS guest_id text;
+ALTER TABLE customer_uploads DROP CONSTRAINT IF EXISTS customer_uploads_owner_check;
+ALTER TABLE customer_uploads ADD CONSTRAINT customer_uploads_owner_check CHECK (user_id IS NOT NULL OR guest_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS customer_uploads_guest_idx ON customer_uploads(guest_id) WHERE guest_id IS NOT NULL;

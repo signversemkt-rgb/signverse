@@ -98,6 +98,7 @@ Breakpoints: `640px`, `960px` (min-width)
 - AI จริงยังไม่เปิด (`ctx.ai` = null) จนกว่าจะมีลายน้ำฝั่ง Server; ใช้ `api/_lib/ai-mock.mjs`
 - `AI_PROVIDER=mock` บนเว็บจริง → `canUseAi()` อนุญาตเฉพาะ staff/admin และงานเป็น `credit_state=exempt` (ไม่หักเครดิต) · ทดสอบในเครื่องด้วย `MOCK_AI_STAFF_ONLY=1`
 - ส่วน `#ai-design` แสดงเสมอ — ปุ่ม/ข้อความทำงานตาม `aiStatus` จาก `/api/me` (`ready` / `mock_test` / `login_required` / `coming_soon`) · `/api/upload` รับรูปเฉพาะเมื่อ `canUseAi` · งาน Mock มี `preview: true` และหน้าเว็บติดป้าย "ไม่ใช่ผลลัพธ์จาก AI จริง" · แก้ต้องรัน `tests/ai-status.test.mjs`
+- **Guest AI** (`api/_lib/guest.mjs`, `GUEST_AI_ENABLED=true`): สร้างภาพโดยไม่ล็อกอิน — ตัวตน = cookie `sv_guest` ลงลายเซ็น HMAC · `resolveActor()` ใน context ตรวจทุก API (ai/upload/files) · งาน/ไฟล์ใช้ `guest_id` (user_id = NULL, `credit_state='guest'`) · เพดานต่อ Guest/IP/วัน ตรวจใน `createJob` ภายใต้ `lockGuestAi()` · **ใช้ได้เฉพาะ AI จริง (ห้าม Mock)** ไม่มี AI จริง = `coming_soon` · ทดสอบหน้าเว็บในเครื่องด้วย `DEV_FAKE_REAL_AI=1` (เฉพาะ MOCK_SERVICES) · แก้ต้องรัน `tests/guest-ai.test.mjs`
 - `MOCK_SERVICES=1` ห้ามใช้บน Production (ระบบปฏิเสธ)
 - หน้าเว็บ: `js/account.js` (login modal), `js/ai-design.js` (gallery picker, uploads, generate, canvas ขนาด), หลังบ้าน `admin/`
 - ทดสอบ: `ELECTRON_RUN_AS_NODE=1 "/Applications/Cursor.app/Contents/MacOS/Cursor" --test tests/*.test.*` (เครื่องนี้ไม่มี Node แยก)

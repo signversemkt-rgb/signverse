@@ -37,6 +37,9 @@
 
   const statusBox = $("aiStatus");
   const GEN_LABEL = "สร้างภาพป้ายด้วย AI ฟรี";
+  const GEN_LABEL_GUEST = "สร้างภาพป้ายด้วย AI ฟรี ไม่ต้องสมัครสมาชิก";
+  const isGuestMode = (acc) => ["guest_ready", "guest_limit"].includes(acc.aiStatus);
+  const genLabelFor = (acc) => (isGuestMode(acc) ? GEN_LABEL_GUEST : GEN_LABEL);
 
   const showError = (msg) => { errBox.textContent = msg || ""; errBox.hidden = !msg; };
   const showNotice = (msg) => { notice.textContent = msg || ""; notice.hidden = !msg; };
@@ -362,8 +365,8 @@
 
   function setBusy(b) {
     state.busy = b;
-    genBtn.disabled = b || window.SVAccount.state.aiStatus === "coming_soon";
-    genLabel.textContent = b ? "กำลังสร้างภาพ…" : GEN_LABEL;
+    genBtn.disabled = b || ["coming_soon", "guest_limit"].includes(window.SVAccount.state.aiStatus);
+    genLabel.textContent = b ? "กำลังสร้างภาพ…" : genLabelFor(window.SVAccount.state);
   }
 
   // ---------- สถานะ AI (มาจาก Server: /api/me → aiStatus) ----------
@@ -377,21 +380,31 @@
         ? "เข้าสู่ระบบด้วย Facebook หรือเบอร์โทรศัพท์ เพื่อใช้สิทธิ์สร้างภาพป้ายฟรี 1 ครั้ง (Artwork + Mockup)"
         : "ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ — กรอกข้อมูลและเลือกรูปไว้ก่อนได้ หรือเข้าสู่ระบบไว้รอรับสิทธิ์ฟรี 1 ครั้ง",
       coming_soon: "ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ — ยังไม่มีการอัปโหลดรูปหรือใช้สิทธิ์ของคุณ ระหว่างนี้ทักทีมงานทาง LINE เพื่อออกแบบป้ายได้เลย",
+      guest_ready: "✔ สร้างภาพป้ายด้วย AI ได้ฟรีทันที ไม่ต้องสมัครสมาชิก",
+      guest_limit: acc.guest && acc.guest.paused
+        ? "ระบบสร้างภาพฟรีปิดชั่วคราว ระหว่างนี้ทักทีมงานทาง LINE เพื่อออกแบบป้ายได้เลย"
+        : "วันนี้คุณสร้างภาพฟรีครบจำนวนแล้ว ลองใหม่พรุ่งนี้ หรือทักทีมงานทาง LINE เพื่อออกแบบต่อได้เลย",
     }[st] || "";
     statusBox.textContent = text;
     statusBox.dataset.state = st;
     statusBox.hidden = !text;
     if (!state.busy) {
-      genBtn.disabled = st === "coming_soon";
-      genLabel.textContent = GEN_LABEL;
+      genBtn.disabled = st === "coming_soon" || st === "guest_limit";
+      genLabel.textContent = genLabelFor(acc);
     }
     genBtn.title = st === "coming_soon" ? "ระบบกำลังเตรียมเปิดบริการ" : "";
   }
 
   function renderQuota() {
-    const q = window.SVAccount.state.quota;
+    const acc = window.SVAccount.state;
+    const q = acc.quota;
     const el = $("aiQuota");
-    if (!window.SVAccount.state.user || !q) { el.hidden = true; return; }
+    if (!acc.user && acc.aiStatus === "guest_ready" && acc.guest) {
+      el.hidden = false;
+      el.textContent = `ฟรี ไม่ต้องสมัครสมาชิก · วันนี้สร้างได้อีก ${acc.guest.remainingToday} ครั้ง`;
+      return;
+    }
+    if (!acc.user || !q) { el.hidden = true; return; }
     el.hidden = false;
     const who = window.SVAccount.state.user.name ? `${window.SVAccount.state.user.name} · ` : "";   // ชื่อ LINE หรือเบอร์ที่ปิดบัง
     el.textContent = who + (q.remaining > 0 ? `สิทธิ์ทดลองฟรีคงเหลือ ${q.remaining} ครั้ง` : "ใช้สิทธิ์ทดลองฟรีครบแล้ว");
@@ -417,7 +430,6 @@
     }
     return turnstileReady;
   }
-
   // ---------- สร้างภาพ ----------
   function validate(d) {
     if (!d.shopName && !d.signText) return "กรุณากรอกชื่อร้าน หรือข้อความบนป้าย ในฟอร์มด้านบน";
@@ -439,7 +451,7 @@
       setStep(step);
       const r = await api("/api/ai", { action: "step", jobId: current.jobId, step });
       current = r.job;
-      window.SVAccount.state.quota = r.quota;
+      if (r.quota) window.SVAccount.state.quota = r.quota;
       renderQuota();
       showJob(current);
       if (current[step].status !== "done") throw Object.assign(new Error(step === "artwork" ? "สร้าง Artwork ไม่สำเร็จ" : "สร้าง Mockup ไม่สำเร็จ"), { code: current.errorCode });
@@ -457,11 +469,13 @@
     if (invalid) { showError(invalid); form.scrollIntoView({ behavior: "smooth" }); return; }
 
     const acc = await window.SVAccount.refresh();
-    if (!acc.user) { await savePending(); window.SVAccount.openLogin(); return; }
+    const guest = !acc.user && isGuestMode(acc);          // โหมด Guest: ไม่ต้องล็อกอิน (Server ตรวจสิทธิ์อีกชั้น)
+    if (!acc.user && !guest) { await savePending(); window.SVAccount.openLogin(); return; }
     renderStatus(acc);
+    if (acc.aiStatus === "guest_limit") return;
     if (!acc.aiAvailable) { showNotice("ระบบสร้างภาพ AI กำลังเตรียมเปิดบริการ ยังไม่มีการอัปโหลดรูปหรือใช้สิทธิ์ของคุณ ระหว่างนี้ทักทีมงานทาง LINE ได้เลย"); return; }
     if (state.job && ["partial", "processing"].includes(state.job.status)) return resume();   // ทำภาพที่เหลือต่อ ไม่ใช้สิทธิ์ใหม่
-    if (acc.quota && acc.quota.remaining <= 0) { window.SVAccount.openModal("quotaModal"); return; }
+    if (!guest && acc.quota && acc.quota.remaining <= 0) { window.SVAccount.openModal("quotaModal"); return; }
 
     setBusy(true);
     try {
@@ -485,14 +499,16 @@
         turnstileToken,
       });
       state.job = created.job;
-      window.SVAccount.state.quota = created.quota;
+      if (created.quota) window.SVAccount.state.quota = created.quota;
+      if (created.guest) window.SVAccount.state.guest = { ...window.SVAccount.state.guest, ...created.guest };
       renderQuota();
       state.job = await runSteps(created.job);
       sessionStorage.removeItem("sv_ai_idem");
     } catch (err) {
       setStep(null);
       if (err.code === "quota_exhausted") { window.SVAccount.openModal("quotaModal"); }
-      else if (err.code === "unauthenticated") { await savePending(); window.SVAccount.openLogin(); }
+      else if (err.code === "unauthenticated" && !guest) { await savePending(); window.SVAccount.openLogin(); }
+      else if (["guest_limit", "guest_daily_full", "guest_paused"].includes(err.code)) { showError(err.message); window.SVAccount.refresh(); }
       else showError(err.message);
       if (window.turnstile && turnstileReady) turnstileReady.then((w) => w != null && window.turnstile.reset(w));
     } finally {
@@ -720,10 +736,11 @@
     // แสดงส่วน AI เสมอ — ปุ่มและข้อความทำงานตามสถานะจาก Server
     renderStatus(acc);
     renderRestoredNotice(acc);
-    // ปุ่มสั่งผลิตผ่าน LINE: แสดงเฉพาะเมื่อเปิดให้บัญชีนี้ใช้ (ช่วงทดสอบ = เฉพาะพนักงาน)
+    // ปุ่มสั่งผลิตผ่าน LINE: แสดงเฉพาะเมื่อเปิดให้บัญชีนี้ใช้ (ช่วงทดสอบ = เฉพาะพนักงาน) · ไม่งั้นแสดงปุ่มติดต่อร้านทาง LINE
     $("aiOrder").hidden = !acc.lineOrders;
+    $("aiContactLine").hidden = acc.lineOrders;
     renderQuota();
-    if (acc.user && !state.job) {
+    if ((acc.user || isGuestMode(acc)) && !state.job) {
       try {
         const { jobs } = await api("/api/ai");
         const latest = jobs.find((j) => ["completed", "partial", "processing"].includes(j.status));

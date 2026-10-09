@@ -15,6 +15,10 @@ function setClause(patch, allowed, startIndex) {
 export function createPgRepo({ Pool, connectionString, uuid }) {
   const pool = new Pool({ connectionString });
   const q = async (sql, params = [], client = pool) => (await client.query(sql, params)).rows;
+  // งาน Guest ตั้งแต่ช่วงเวลา (กรองต่อ Guest / ต่อ IP ได้)
+  const countGuest = async ({ since, guestId = null, ipHash = null }, client = pool) => Number((await q(
+    `SELECT count(*) FROM ai_jobs WHERE guest_id IS NOT NULL AND created_at >= $1
+       AND ($2::text IS NULL OR guest_id = $2) AND ($3::text IS NULL OR guest_ip_hash = $3)`, [since, guestId, ipHash], client))[0].count);
 
   const txApi = (c) => ({
     async userExists(userId) { return (await q(`SELECT 1 FROM "user" WHERE "id" = $1`, [userId], c)).length > 0; },
@@ -30,10 +34,16 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
       await q(`UPDATE ai_quota SET ${s.sql}, updated_at = now() WHERE user_id = $1`, [userId, ...s.values], c);
     },
     async insertJob(j) {
-      await q(`INSERT INTO ai_jobs (job_id, user_id, idempotency_key, status, artwork_status, mockup_status, credit_state, attempts, input, created_at, updated_at)
-               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [j.job_id, j.user_id, j.idempotency_key, j.status, j.artwork_status, j.mockup_status, j.credit_state, j.attempts, JSON.stringify(j.input), j.created_at, j.updated_at], c);
+      await q(`INSERT INTO ai_jobs (job_id, user_id, guest_id, guest_ip_hash, idempotency_key, status, artwork_status, mockup_status, credit_state, attempts, input, created_at, updated_at)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [j.job_id, j.user_id, j.guest_id || null, j.guest_ip_hash || null, j.idempotency_key, j.status, j.artwork_status, j.mockup_status, j.credit_state, j.attempts, JSON.stringify(j.input), j.created_at, j.updated_at], c);
     },
+    // ---------- Guest (ไม่ต้องสมัครสมาชิก) ----------
+    // ล็อกระดับ transaction: คำขอสร้างงาน Guest เข้าคิวทีละรายการ → นับเพดานรายวันได้แม่นยำ
+    async lockAiBudget() { await q(`SELECT pg_advisory_xact_lock(hashtext('sv-ai-budget'))`, [], c); },
+    async findGuestJobByIdem(guestId, key) { return (await q(`SELECT * FROM ai_jobs WHERE guest_id = $1 AND idempotency_key = $2`, [guestId, key], c))[0] || null; },
+    async countGuestActiveJobs(guestId) { return Number((await q(`SELECT count(*) FROM ai_jobs WHERE guest_id = $1 AND status IN ('pending','processing')`, [guestId], c))[0].count); },
+    async countGuestJobsSince(o) { return countGuest(o, c); },
     async getJobForUpdate(jobId) { return (await q(`SELECT * FROM ai_jobs WHERE job_id = $1 FOR UPDATE`, [jobId], c))[0] || null; },
     async updateJob(jobId, patch) {
       const s = setClause(patch, JOB_COLS, 2);
@@ -73,6 +83,8 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
     },
     async getJob(jobId) { return (await q(`SELECT * FROM ai_jobs WHERE job_id = $1`, [jobId]))[0] || null; },
     async listJobsByUser(userId, limit = 20) { return q(`SELECT * FROM ai_jobs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`, [userId, limit]); },
+    async listJobsByGuest(guestId, limit = 10) { return q(`SELECT * FROM ai_jobs WHERE guest_id = $1 ORDER BY created_at DESC LIMIT $2`, [guestId, limit]); },
+    async countGuestJobsSince(o) { return countGuest(o); },
     async listProblemJobs(staleBefore, limit = 50) {
       return q(`SELECT * FROM ai_jobs WHERE credit_state = 'reserved'
                 AND (artwork_status = 'unknown' OR mockup_status = 'unknown' OR (status IN ('pending','processing') AND updated_at < $1))
@@ -88,14 +100,17 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
 
     // ---------- customer uploads ----------
     async createUpload(u) {
-      await q(`INSERT INTO customer_uploads (upload_id, user_id, kind, storage_key, mime, size_bytes, created_at, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [u.upload_id, u.user_id, u.kind, u.storage_key, u.mime, u.size_bytes, u.created_at, u.expires_at]);
+      await q(`INSERT INTO customer_uploads (upload_id, user_id, guest_id, kind, storage_key, mime, size_bytes, created_at, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [u.upload_id, u.user_id || null, u.guest_id || null, u.kind, u.storage_key, u.mime, u.size_bytes, u.created_at, u.expires_at]);
     },
     async getUploads(ids) { return ids.length ? q(`SELECT * FROM customer_uploads WHERE upload_id = ANY($1)`, [ids]) : []; },
     async listExpiredUploads(now, limit = 200) { return q(`SELECT * FROM customer_uploads WHERE expires_at < $1 LIMIT $2`, [now, limit]); },
     async deleteUpload(id) { await q(`DELETE FROM customer_uploads WHERE upload_id = $1`, [id]); },
     async listExpiredJobs(before, limit = 200) {
       return q(`SELECT * FROM ai_jobs WHERE created_at < $1 AND (artwork_storage_key IS NOT NULL OR mockup_storage_key IS NOT NULL) LIMIT $2`, [before, limit]);
+    },
+    async listExpiredGuestJobs(before, limit = 200) {
+      return q(`SELECT * FROM ai_jobs WHERE guest_id IS NOT NULL AND created_at < $1 AND (artwork_storage_key IS NOT NULL OR mockup_storage_key IS NOT NULL) LIMIT $2`, [before, limit]);
     },
     async clearJobFiles(jobId) {
       await q(`UPDATE ai_jobs SET artwork_storage_key = NULL, mockup_storage_key = NULL,
@@ -105,8 +120,8 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
     },
     async findJobFile(jobId, kind) {
       if (!["artwork", "mockup"].includes(kind)) return null;
-      const row = (await q(`SELECT user_id, ${kind}_storage_key AS key FROM ai_jobs WHERE job_id = $1`, [jobId]))[0];
-      return row && row.key ? { userId: row.user_id, key: row.key } : null;
+      const row = (await q(`SELECT user_id, guest_id, ${kind}_storage_key AS key FROM ai_jobs WHERE job_id = $1`, [jobId]))[0];
+      return row && row.key ? { userId: row.user_id, guestId: row.guest_id, key: row.key } : null;
     },
 
     // ---------- gallery ----------

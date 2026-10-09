@@ -39,9 +39,37 @@ function startOfDay(now) {
   return d;
 }
 
+// เจ้าของงาน: สมาชิก (user_id) หรือ Guest (guest_id) — ตรวจทุกครั้งที่อ่าน/สร้างภาพ
+export const isJobOwner = (job, { userId, guestId } = {}) =>
+  Boolean(job && ((userId && job.user_id === userId) || (guestId && job.guest_id === guestId)));
+
+// งานของ Guest (ไม่ต้องสมัครสมาชิก): ไม่ใช้โควตาสมาชิก แต่ผ่านเพดานทั้งหมดภายใน transaction ที่ล็อกไว้
+//   ต่อ Guest/วัน · ต่อ IP/วัน · ทั้งระบบ/วัน · งบ AI ต่อเดือน (ถึงวงเงิน = ปิดอัตโนมัติ) · 1 งานที่กำลังทำต่อ Guest
+async function createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uuid, now, limits, dayStart }) {
+  return repo.tx(async (t) => {
+    await t.lockAiBudget();                           // คำขอ Guest เข้าคิวทีละรายการ → นับเพดานได้แม่นยำ
+    const existing = await t.findGuestJobByIdem(guestId, idempotencyKey);
+    if (existing) return { job: existing, created: false };
+    if (await t.countGuestActiveJobs(guestId)) throw new HttpError(409, "job_in_progress");
+    if ((await t.countGuestJobsSince({ since: dayStart })) >= limits.dailyTotal) throw new HttpError(429, "guest_daily_full");
+    if ((await t.countGuestJobsSince({ since: dayStart, guestId })) >= limits.perGuestDay) throw new HttpError(429, "guest_limit");
+    if ((await t.countGuestJobsSince({ since: dayStart, ipHash })) >= limits.perIpDay) throw new HttpError(429, "guest_limit");
+    const job = {
+      job_id: uuid(), user_id: null, guest_id: guestId, guest_ip_hash: ipHash, idempotency_key: idempotencyKey,
+      status: "pending", artwork_status: "pending", mockup_status: "pending", artwork_storage_key: null, mockup_storage_key: null,
+      credit_state: "guest", attempts: 0, input, error_code: null,
+      created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString(),
+    };
+    await t.insertJob(job);
+    await t.audit(null, "ai_guest_job_created", job.job_id, {});
+    return { job, created: true };
+  });
+}
+
 // จองสิทธิ์และสร้างงาน (Idempotent ด้วย idempotencyKey)
-export async function createJob({ repo, userId, idempotencyKey, input, dailyLimit, defaultCredits, uuid, now = Date.now(), exempt = false }) {
+export async function createJob({ repo, userId, guestId, ipHash, guestLimits, dayStart, idempotencyKey, input, dailyLimit, defaultCredits, uuid, now = Date.now(), exempt = false }) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey || "")) throw new HttpError(400, "bad_request");
+  if (!userId && guestId) return createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uuid, now, limits: guestLimits, dayStart });
   return repo.tx(async (t) => {
     // ล็อกแถวโควตาของผู้ใช้ก่อน → คำขอพร้อมกันของคนเดียวกันต่อคิวกัน (กันใช้สิทธิ์เกิน/หักซ้ำ)
     const q = await t.getQuotaForUpdate(userId, defaultCredits);
@@ -83,14 +111,14 @@ function isStale(job, now) {
 }
 
 // สร้างภาพทีละขั้น (artwork → mockup) — เรียกซ้ำได้ ภาพที่สำเร็จแล้วจะไม่ถูกสร้างใหม่
-export async function runStep({ repo, storage, provider, userId, jobId, step, now = () => Date.now() }) {
+export async function runStep({ repo, storage, provider, userId, guestId, jobId, step, now = () => Date.now() }) {
   if (!STEPS.includes(step)) throw new HttpError(400, "bad_request");
   const statusKey = `${step}_status`;
 
   // 1) ล็อกงานและเปลี่ยนเป็น processing
   const started = await repo.tx(async (t) => {
     const job = await t.getJobForUpdate(jobId);
-    if (!job || job.user_id !== userId) throw new HttpError(404, "not_found");
+    if (!isJobOwner(job, { userId, guestId })) throw new HttpError(404, "not_found");
     if (job[statusKey] === "done") return { job, skip: true };
     if (job.status === "failed" && job.credit_state === "refunded") throw new HttpError(409, "job_closed");
     if (job[statusKey] === "processing" && !isStale(job, now())) throw new HttpError(409, "step_busy");
@@ -114,7 +142,7 @@ export async function runStep({ repo, storage, provider, userId, jobId, step, no
   }
 
   // 3) เก็บไฟล์ใน Private Blob แล้วบันทึกผล + ใช้สิทธิ์ (ครั้งเดียวต่องาน)
-  const key = await storage.putPrivate(`ai/${userId}/${jobId}/${step}.${result.ext}`, result.bytes, result.mime);
+  const key = await storage.putPrivate(`ai/${userId || `guest-${guestId}`}/${jobId}/${step}.${result.ext}`, result.bytes, result.mime);
   return repo.tx(async (t) => {
     const cur = await t.getJobForUpdate(jobId);
     const patch = { [statusKey]: "done", [`${step}_storage_key`]: key, error_code: null, updated_at: new Date(now()).toISOString() };

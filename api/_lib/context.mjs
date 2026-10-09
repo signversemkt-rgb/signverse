@@ -7,6 +7,7 @@ import { createMemoryStorage, createVercelStorage, resolveBlobConfig } from "./s
 import { createMockProvider } from "./ai-mock.mjs";
 import { enabledLoginMethods, phoneLoginStatus, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
 import { phoneLoginConfig, createOtpService } from "./phone.mjs";
+import { guestConfig, guestAiState, readGuestId, ensureGuestId } from "./guest.mjs";
 import { createLineClient } from "./line.mjs";
 
 const int = (v, d) => {
@@ -51,6 +52,7 @@ export async function getContext(env = process.env) {
       lineGroupOrdersEnabled: env.LINE_GROUP_ORDERS_ENABLED === "true",
       liffId: env.LIFF_ID || "",                          // เปิดเผยได้ (ใช้ฝั่งหน้า LIFF)
       liffChannelId: env.LINE_LOGIN_CHANNEL_ID || "",     // ใช้ตรวจ LIFF ID token ฝั่ง Server
+      guest: guestConfig(env, { mock }),                  // สร้างภาพ AI โดยไม่ต้องสมัครสมาชิก (GUEST_AI_ENABLED)
     },
     // ปุ่มเข้าสู่ระบบบนหน้าเว็บ: social = ["facebook"] (LINE/Google ปิด — เปิดได้ด้วย AUTH_PROVIDERS) + สถานะเบอร์โทร
     providers: enabledLoginMethods(env, { mock }),
@@ -65,6 +67,8 @@ export async function getContext(env = process.env) {
     ctx.storage = createMemoryStorage({ uuid: newId });
     ctx.ai = createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" });
     ctx.aiMockStaffOnly = env.MOCK_AI_STAFF_ONLY === "1";   // จำลองเว็บจริงที่ตั้ง AI_PROVIDER=mock (ทดสอบในเครื่อง)
+    // ทดสอบหน้าเว็บโหมด Guest ในเครื่องเท่านั้น: ให้ภาพตัวอย่างทำตัวเป็น "AI จริง" (MOCK_SERVICES ใช้บน Production ไม่ได้)
+    if (env.DEV_FAKE_REAL_AI === "1") ctx.ai = { ...ctx.ai, name: "dev-fake-real" };
     // เบอร์โทร + OTP แบบจำลอง (SMS ไม่ถูกส่งจริง) — ระบบจริงทำงานผ่าน Better Auth phoneNumber plugin ใน auth.mjs
     const phoneCfg = phoneLoginConfig(env, { mock: true });
     if (phoneCfg.ready) {
@@ -106,6 +110,21 @@ export async function getContext(env = process.env) {
   ctx.authReady = mock || authConfigured(env);
   cached = ctx;
   return ctx;
+}
+
+// ผู้เรียก API สร้างภาพ: สมาชิก (session) หรือ Guest (เมื่อ GUEST_AI_ENABLED=true และ AI จริงพร้อม)
+//   create=true → ออก cookie Guest ใหม่ถ้ายังไม่มี · ไม่มีทั้งสองอย่าง = 401 (กลับไปใช้ระบบล็อกอินตามเดิม)
+export async function resolveActor(ctx, req, res, { create = false } = {}) {
+  const user = await ctx.getSession(req);
+  if (user) {
+    if (user.accountStatus === "suspended") throw new HttpError(403, "suspended");
+    return { user, userId: user.id, guestId: null };
+  }
+  if (guestAiState(ctx) === "ready") {
+    const guestId = create ? ensureGuestId(ctx, req, res) : readGuestId(ctx, req);
+    if (guestId) return { user: null, userId: null, guestId };
+  }
+  throw new HttpError(401, "unauthenticated");
 }
 
 export function need(ctx, ...parts) {
@@ -178,13 +197,19 @@ export function canUseAi(ctx, user) {
 //   ready          → AI จริงพร้อม และผู้ใช้นี้สร้างได้ (โควตายังตรวจที่ createJob)
 //   mock_test      → ใช้ Mock AI ได้ (พนักงาน / dev ในเครื่อง) — ผลเป็นภาพตัวอย่าง ไม่ใช่ AI จริง
 //   login_required → ยังไม่ล็อกอิน (กดปุ่มแล้วเปิดหน้าต่างเข้าสู่ระบบ)
+//   guest_ready    → ไม่ต้องล็อกอิน (GUEST_AI_ENABLED + AI จริงพร้อม) · guest_limit → ครบเพดานวันนี้/งบเดือนนี้
 //   coming_soon    → ล็อกอินแล้ว แต่ระบบยังไม่เปิดให้ผู้ใช้นี้ (ไม่อัปโหลดรูป ไม่สร้างภาพ ไม่ใช้สิทธิ์)
 // aiReady = เปิดให้ลูกค้าทั่วไปใช้ AI จริงแล้วหรือยัง (ไม่ขึ้นกับผู้ใช้)
 export function aiReadyForCustomers(ctx) {
   return Boolean(ctx.ai && ctx.repo && ctx.storage && ctx.ai.name !== "mock" && !ctx.aiMockStaffOnly);
 }
-export function aiStatus(ctx, user) {
-  if (!user) return "login_required";
+export function aiStatus(ctx, user, guest = null) {
+  if (!user) {
+    const g = guestAiState(ctx);
+    if (g === "off") return "login_required";
+    if (g === "coming_soon") return "coming_soon";
+    return guest && (guest.paused || guest.remainingToday <= 0) ? "guest_limit" : "guest_ready";
+  }
   if (!canUseAi(ctx, user)) return "coming_soon";
   return ctx.ai.name === "mock" ? "mock_test" : "ready";
 }

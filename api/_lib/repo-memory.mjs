@@ -19,6 +19,8 @@ export function createMemoryRepo({ uuid }) {
     otp: new Map(),        // request_id → { phone_hash, code_hash, attempts, expires_at, consumed_at, created_at }
   };
   let chain = Promise.resolve();
+  const countGuest = (since, guestId, ipHash) => [...db.jobs.values()].filter((j) => j.guest_id && new Date(j.created_at) >= since
+    && (!guestId || j.guest_id === guestId) && (!ipHash || j.guest_ip_hash === ipHash)).length;
   const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
 
   const t = {
@@ -45,12 +47,23 @@ export function createMemoryRepo({ uuid }) {
       db.quota.set(userId, q);
     },
     async insertJob(job) {
-      if (job.status === "pending" && [...db.jobs.values()].some((j) => j.user_id === job.user_id && ["pending", "processing"].includes(j.status))) {
+      const owner = (j) => j.user_id || `guest:${j.guest_id}`;     // 1 งานที่กำลังทำต่อสมาชิก / ต่อ Guest
+      if (job.status === "pending" && [...db.jobs.values()].some((j) => owner(j) === owner(job) && ["pending", "processing"].includes(j.status))) {
         throw new Error("unique violation ai_jobs_one_active");
       }
       db.jobs.set(job.job_id, clone(job));
     },
     async getJobForUpdate(jobId) { return clone(db.jobs.get(jobId)) || null; },
+    // ---------- Guest (ไม่ต้องสมัครสมาชิก) ----------
+    async lockAiBudget() { /* transaction ในหน่วยความจำทำงานทีละรายการอยู่แล้ว */ },
+    async findGuestJobByIdem(guestId, key) {
+      for (const j of db.jobs.values()) if (j.guest_id === guestId && j.idempotency_key === key) return clone(j);
+      return null;
+    },
+    async countGuestActiveJobs(guestId) {
+      return [...db.jobs.values()].filter((j) => j.guest_id === guestId && ["pending", "processing"].includes(j.status)).length;
+    },
+    async countGuestJobsSince({ since, guestId, ipHash }) { return countGuest(since, guestId, ipHash); },
     async updateJob(jobId, patch) { db.jobs.set(jobId, { ...db.jobs.get(jobId), ...clone(patch) }); },
     async audit(actorId, action, target, detail) {
       db.audit.push({ event_id: uuid(), actor_id: actorId, action, target, detail, created_at: new Date().toISOString() });
@@ -77,6 +90,10 @@ export function createMemoryRepo({ uuid }) {
       return clone(rows);
     },
     async getJob(jobId) { return clone(db.jobs.get(jobId)) || null; },
+    async listJobsByGuest(guestId, limit = 10) {
+      return clone([...db.jobs.values()].filter((j) => j.guest_id === guestId).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit));
+    },
+    async countGuestJobsSince({ since, guestId, ipHash }) { return countGuest(since, guestId, ipHash); },
     async listJobsByUser(userId, limit = 20) {
       return clone([...db.jobs.values()].filter((j) => j.user_id === userId).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit));
     },
@@ -103,6 +120,9 @@ export function createMemoryRepo({ uuid }) {
     async listExpiredJobs(before, limit = 200) {
       return clone([...db.jobs.values()].filter((j) => new Date(j.created_at) < before && (j.artwork_storage_key || j.mockup_storage_key)).slice(0, limit));
     },
+    async listExpiredGuestJobs(before, limit = 200) {
+      return clone([...db.jobs.values()].filter((j) => j.guest_id && new Date(j.created_at) < before && (j.artwork_storage_key || j.mockup_storage_key)).slice(0, limit));
+    },
     async clearJobFiles(jobId) { const j = db.jobs.get(jobId); if (j) { j.artwork_storage_key = null; j.mockup_storage_key = null; j.artwork_status = j.artwork_status === "done" ? "failed" : j.artwork_status; j.mockup_status = j.mockup_status === "done" ? "failed" : j.mockup_status; j.error_code = "expired"; } },
 
     // ไฟล์ private นี้เป็นของใคร (ใช้ตรวจสิทธิ์ใน /api/files)
@@ -110,7 +130,7 @@ export function createMemoryRepo({ uuid }) {
       const j = db.jobs.get(jobId);
       if (!j) return null;
       const key = j[`${kind}_storage_key`];
-      return key ? { userId: j.user_id, key } : null;
+      return key ? { userId: j.user_id, guestId: j.guest_id || null, key } : null;
     },
 
     // ---------- gallery ----------

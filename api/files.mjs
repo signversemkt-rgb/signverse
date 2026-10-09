@@ -1,10 +1,10 @@
 // GET /api/files — ส่งไฟล์จาก Private Blob หลังตรวจสิทธิ์ทุกครั้ง (ห้าม cache ที่ CDN)
-//   ?job=ID&kind=artwork|mockup → เจ้าของงาน หรือพนักงาน
+//   ?job=ID&kind=artwork|mockup → เจ้าของงาน (สมาชิก หรือ Guest เจ้าของ cookie) หรือพนักงาน
 //   ?upload=ID                  → เจ้าของไฟล์ หรือพนักงาน
 //   ?gallery=ID[&thumb=1]       → ต้นฉบับรูปผลงาน (พนักงานเท่านั้น)
 import { route } from "./_lib/route.mjs";
 import { query, HttpError, isId } from "./_lib/http.mjs";
-import { need, requireUser, rateLimit } from "./_lib/context.mjs";
+import { need, rateLimit, resolveActor } from "./_lib/context.mjs";
 import { getIp } from "./_lib/http.mjs";
 import { verifyFileSig } from "./_lib/line.mjs";
 
@@ -26,19 +26,20 @@ export default route(async (req, res, ctx) => {
     return sendFile(res, await ctx.storage.getPrivate(f.key));
   }
 
-  const user = await requireUser(ctx, req);
+  const { user, guestId } = await resolveActor(ctx, req, res);
+  const mine = (row) => Boolean(row && ((user && (row.userId ?? row.user_id) === user.id) || (guestId && (row.guestId ?? row.guest_id) === guestId)));
 
   if (q.job) {
     if (!isId(q.job)) throw new HttpError(400, "bad_request");
     const f = await ctx.repo.findJobFile(q.job, q.kind);
-    if (f && (f.userId === user.id || isStaff(user))) key = f.key;
+    if (f && (mine(f) || (user && isStaff(user)))) key = f.key;
   } else if (q.upload) {
     if (!isId(q.upload)) throw new HttpError(400, "bad_request");
     const [u] = await ctx.repo.getUploads([q.upload]);
-    if (u && (u.user_id === user.id || isStaff(user))) key = u.storage_key;
+    if (u && (mine(u) || (user && isStaff(user)))) key = u.storage_key;
   } else if (q.gallery) {
     if (!isId(q.gallery)) throw new HttpError(400, "bad_request");
-    if (!isStaff(user)) throw new HttpError(403, "forbidden");
+    if (!user || !isStaff(user)) throw new HttpError(403, "forbidden");
     const img = await ctx.repo.getImage(q.gallery);
     if (img) key = q.thumb === "1" ? img.private_thumb_key : img.private_key;
   }
