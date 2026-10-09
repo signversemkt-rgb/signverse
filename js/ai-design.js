@@ -348,7 +348,7 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     const data = await r.json().catch(() => ({}));
-    if (!r.ok) throw Object.assign(new Error(data.error || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง"), { code: data.code, status: r.status });
+    if (!r.ok) throw Object.assign(new Error(data.error || "เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง"), { code: data.code, status: r.status, missing: Array.isArray(data.missing) ? data.missing : null });
     return data;
   }
 
@@ -786,7 +786,8 @@
       await api("/api/ai", { action: "testLogin", code });
       await window.SVAccount.refresh();
     } catch (ex) {
-      err.textContent = ex.message;
+      // รหัสถูกแต่ตั้งค่าไม่ครบ → แสดงชื่อตัวแปรที่ต้องแก้ (Server ส่งให้เฉพาะผู้ที่รู้รหัส)
+      err.textContent = ex.missing && ex.missing.length ? `${ex.message}: ${ex.missing.join(", ")}` : ex.message;
       err.hidden = false;
     }
   });

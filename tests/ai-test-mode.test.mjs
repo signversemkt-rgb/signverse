@@ -61,14 +61,61 @@ async function login(addr = ip()) {
   return { cookie: cookieOf(r).split(";")[0], ip: addr, res: r };
 }
 
-test("ปิดอยู่ (ค่าเริ่มต้น) / รหัสสั้นเกิน / ใช้ Mock AI → ไม่มีโหมดทดสอบ", async () => {
+test("ปิดอยู่ (ค่าเริ่มต้น) / รหัสสั้นเกิน / ใช้ Mock AI → ไม่มีโหมดทดสอบ · ผู้ไม่รู้รหัสได้ 404 เหมือนไม่มีโหมดนี้", async () => {
   mode({ enabled: false });
-  assert.equal((await post(null, { action: "testLogin", code: CODE })).status, 404);
+  assert.equal((await post(null, { action: "testLogin", code: "someone-guessing-123" })).status, 404);
   assert.equal((await call(me)).json.aiTest, null);
   mode({ code: "short" });
   assert.equal(ctx.config.aiTest.enabled, false, "รหัสต้องยาว ≥ 12 ตัว");
   mode({ provider: mockAi });
-  assert.equal((await post(null, { action: "testLogin", code: CODE })).status, 404, "ห้ามใช้ Mock AI ในโหมดทดสอบ");
+  assert.equal((await post(null, { action: "testLogin", code: "someone-guessing-123" })).status, 404, "ห้ามใช้ Mock AI ในโหมดทดสอบ");
+  // เจ้าของ (รู้รหัส) ได้ชื่อเงื่อนไขที่ยังไม่ครบ — ไม่มีค่า secret
+  const owner = await post(null, { action: "testLogin", code: CODE });
+  assert.equal(owner.status, 503);
+  assert.equal(owner.json.code, "ai_test_not_ready");
+  assert.ok(owner.json.missing.includes("invalid_AI_PROVIDER_mock"));
+  assert.ok(owner.json.missing.every((m) => /^(missing|invalid)_[A-Z_a-z]+$/.test(m)));
+  assert.ok(!JSON.stringify(owner.json).includes(CODE) && !JSON.stringify(owner.json).includes(SECRET));
+  assert.equal(cookieOf(owner), undefined, "ไม่ออกเซสชัน");
+});
+
+test("วินิจฉัยตัวแปร: บอกชื่อที่ขาด/ผิด · อ่านค่าแบบทนทาน (ช่องว่าง บรรทัดใหม่ ตัวพิมพ์ใหญ่) · ครบแล้ว aiTest.enabled = true", async () => {
+  const { aiTestDiagnostics, aiTestReady } = await import("../api/_lib/aitest.mjs");
+  const base = { repo: {}, storage: {}, ai: { name: "openai" } };
+  assert.deepEqual(aiTestDiagnostics({ ...base, ai: null }, {}).sort(), ["missing_AI_PROVIDER", "missing_AI_TEST_CODE", "missing_AI_TEST_MODE", "missing_BETTER_AUTH_SECRET", "missing_OPENAI_API_KEY"].sort());
+  assert.deepEqual(aiTestDiagnostics(base, { AI_PROVIDER: "gemini", OPENAI_API_KEY: "k", AI_TEST_MODE: "yes", AI_TEST_CODE: "short", BETTER_AUTH_SECRET: "x" }).sort(),
+    ["invalid_AI_PROVIDER", "invalid_AI_TEST_CODE", "invalid_AI_TEST_MODE", "invalid_BETTER_AUTH_SECRET"].sort());
+  assert.deepEqual(aiTestDiagnostics({ ...base, repo: null, storage: null }, { AI_PROVIDER: "openai", OPENAI_API_KEY: "k", AI_TEST_MODE: "true", AI_TEST_CODE: CODE, BETTER_AUTH_SECRET: SECRET }), ["missing_DATABASE", "missing_BLOB_STORAGE"]);
+  // GUEST_SIGNING_SECRET สั้นเกิน → ไม่ทับ BETTER_AUTH_SECRET ที่ใช้ได้ และบอกชื่อที่ถูกต้อง
+  const shortGuest = { AI_PROVIDER: "openai", OPENAI_API_KEY: "k", AI_TEST_MODE: "true", AI_TEST_CODE: CODE, BETTER_AUTH_SECRET: SECRET, GUEST_SIGNING_SECRET: "short" };
+  assert.deepEqual(aiTestDiagnostics(base, shortGuest), ["invalid_GUEST_SIGNING_SECRET"]);
+  assert.equal(aiTestConfig(shortGuest).enabled, true, "ยังเปิดได้ด้วย BETTER_AUTH_SECRET");
+  // สมาชิกที่ล็อกอินอยู่ไม่เห็นโหมดทดสอบ (ใช้ระบบสมาชิกตามปกติ) · ผู้ไม่ล็อกอินเห็น
+  // ค่าแบบที่มักวางมาจาก Vercel: ตัวพิมพ์ใหญ่ + ช่องว่าง + ขึ้นบรรทัดใหม่
+  const messy = { AI_PROVIDER: " OpenAI\n", OPENAI_API_KEY: "sk-test-key-never-sent\n", AI_TEST_MODE: "True ", AI_TEST_CODE: ` ${CODE}\n`, BETTER_AUTH_SECRET: `${SECRET}\n`, BETTER_AUTH_URL: "https://signverse-azure.vercel.app" };
+  assert.deepEqual(aiTestDiagnostics(base, messy), []);
+  const { getContext: fresh } = await import("../api/_lib/context.mjs?messy=" + Date.now());
+  const c = await fresh(messy);
+  assert.equal(c.ai && c.ai.name, "openai", "AI_PROVIDER มีช่องว่าง/ตัวพิมพ์ใหญ่ ยังอ่านได้");
+  assert.equal(c.config.aiTest.enabled, true);
+  c.repo = ctx.repo; c.storage = ctx.storage;
+  assert.equal(aiTestReady(c), true);
+  // รหัสที่มีช่องว่างหัวท้ายใน Vercel ยังตรงกับที่เจ้าของพิมพ์
+  const { testLogin } = await import("../api/_lib/aitest.mjs");
+  const res = { headers: {}, setHeader(k, v) { this.headers[k.toLowerCase()] = v; } };
+  await testLogin(c, { headers: {} }, res, CODE, "1.2.3.99");
+  assert.match(res.headers["set-cookie"], /^sv_aitest=/);
+  // /api/me ของเว็บจริงที่ตั้งค่าครบ → aiTest.enabled = true
+  const saved = { ai: ctx.ai, aiTest: ctx.config.aiTest };
+  try {
+    ctx.ai = c.ai; ctx.config.aiTest = c.config.aiTest;
+    const m = (await call(me)).json;
+    assert.deepEqual(m.aiTest, { enabled: true, active: false }, "ผู้ไม่ล็อกอิน (ไม่ใช้ Facebook) เห็นโหมดทดสอบ");
+    assert.equal(m.aiStatus, "login_required", "ยังไม่ได้กรอกรหัส = สถานะปกติ");
+    assert.equal(m.aiAvailable, false);
+    const noSession = await post(null, { action: "create", idempotencyKey: idem(), input: FORM });
+    assert.equal(noSession.status, 401, "ผู้ใช้ทั่วไปที่ไม่มีเซสชันทดสอบสร้างภาพไม่ได้");
+  } finally { ctx.ai = saved.ai; ctx.config.aiTest = saved.aiTest; }
 });
 
 test("รหัสผิด → ปฏิเสธ · จำกัดการเดา 5 ครั้ง/IP · รหัสถูก → cookie HttpOnly + SameSite=Strict อายุสั้น · ไม่ส่งรหัสกลับ", async () => {

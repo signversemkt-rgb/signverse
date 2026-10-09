@@ -7,7 +7,7 @@
 //   GET  /api/ai?orders=1     → คำขอสั่งผลิตของฉัน (พร้อมสถานะการส่งผ่าน LINE)
 //   POST /api/ai {action:"liffOrders"|"liffPrepare"|"liffResult", idToken, …}  → หน้า LIFF (ยืนยันตัวตนด้วย LINE ID token)
 import { route } from "./_lib/route.mjs";
-import { sendJson, readJson, query, HttpError, assertSameOrigin, getIp, cleanText, isId, isMissingSchema } from "./_lib/http.mjs";
+import { sendJson, readJson, query, HttpError, assertSameOrigin, getIp, cleanText, isId, isMissingSchema, errorBody } from "./_lib/http.mjs";
 import { need, rateLimit, verifyTurnstile, canUseLineOrders, canUseAi, isCreditExempt, resolveActor } from "./_lib/context.mjs";
 import { createJob, runStep, jobView, quotaView, isJobOwner } from "./_lib/jobs.mjs";
 import { ipHash, dayStart, guestUsage, budgetNow } from "./_lib/guest.mjs";
@@ -147,7 +147,14 @@ export default route(async (req, res, ctx) => {
     // โหมดทดสอบ AI: ยืนยันรหัส / ออกจากโหมด (ตรวจรหัสฝั่ง Server เท่านั้น)
     if (req.body.action === "testLogin") {
       assertSameOrigin(req, ctx.config.origins);
-      const r = await testLogin(ctx, req, res, req.body.code, getIp(req));
+      let r;
+      try {
+        r = await testLogin(ctx, req, res, req.body.code, getIp(req));
+      } catch (err) {
+        // ผู้ที่รู้รหัสทดสอบเท่านั้นได้รายชื่อเงื่อนไขที่ยังไม่ครบ (ไม่มีค่า secret)
+        if (err instanceof HttpError && err.code === "ai_test_not_ready") return sendJson(res, 503, { ...errorBody(err.code), missing: err.details });
+        throw err;
+      }
       let usage = null;
       try { usage = await testUsage(ctx); } catch (err) { if (!isMissingSchema(err)) throw err; usage = { error: "db_migration_required" }; }
       return sendJson(res, 200, { ok: true, expiresAt: r.expiresAt, usage });

@@ -9,7 +9,7 @@ import { enabledLoginMethods, phoneLoginStatus, getAuth, sessionFromRequest, aut
 import { phoneLoginConfig, createOtpService } from "./phone.mjs";
 import { guestConfig, guestAiState, readGuestId, ensureGuestId, aiBudgetConfig } from "./guest.mjs";
 import { createOpenAIProvider } from "./ai-openai.mjs";
-import { aiTestConfig, readTestSession, testOwnerId } from "./aitest.mjs";
+import { aiTestConfig, readTestSession, testOwnerId, aiTestDiagnostics, envFlag, envText } from "./aitest.mjs";
 import { createLineClient } from "./line.mjs";
 
 const int = (v, d) => {
@@ -99,14 +99,15 @@ export async function getContext(env = process.env) {
     //   AI_PROVIDER=mock   → ภาพตัวอย่าง (ไม่มีค่าใช้จ่าย) เฉพาะพนักงาน
     //   AI_PROVIDER=openai → GPT Image 2 + ลายน้ำฝั่ง Server (sharp) · มีค่าใช้จ่าย · ผ่านงบรายวัน/รายเดือน
     //     AI_ACCESS=staff (ค่าเริ่มต้น) = เฉพาะพนักงานทดสอบ · AI_ACCESS=members = เปิดให้สมาชิก (และ Guest ถ้าเปิด flag)
-    if (env.AI_PROVIDER === "openai" && env.OPENAI_API_KEY) {
+    // ค่าที่อ่านแบบทนทาน (ตัดช่องว่าง/บรรทัดใหม่ · ไม่สนตัวพิมพ์) — ค่าที่วางใน Vercel มักมีช่องว่างติดมา
+    if (envFlag(env.AI_PROVIDER) === "openai" && envText(env.OPENAI_API_KEY)) {
       ctx.ai = createOpenAIProvider({
-        apiKey: env.OPENAI_API_KEY,
-        model: env.OPENAI_IMAGE_MODEL || "gpt-image-2",
-        quality: env.AI_IMAGE_QUALITY || "medium",
+        apiKey: envText(env.OPENAI_API_KEY),
+        model: envText(env.OPENAI_IMAGE_MODEL) || "gpt-image-2",
+        quality: envFlag(env.AI_IMAGE_QUALITY) || "medium",
         loadImage: (ref) => loadReferenceImage(ctx, ref),
       });
-      ctx.aiStaffOnly = env.AI_ACCESS !== "members";
+      ctx.aiStaffOnly = envFlag(env.AI_ACCESS) !== "members";
     } else {
       ctx.ai = env.AI_PROVIDER === "mock" ? createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" }) : null;
     }
@@ -124,6 +125,10 @@ export async function getContext(env = process.env) {
     ctx.line.push = async () => { throw new HttpError(403, "feature_disabled"); };
   }
   ctx.authReady = mock || authConfigured(env);
+  // วินิจฉัยโหมดทดสอบใน log ของ Vercel (เห็นเฉพาะเจ้าของโปรเจกต์) — ชื่อเงื่อนไขเท่านั้น ไม่มีค่า
+  if (!mock && envText(env.AI_TEST_MODE) && !(ctx.config.aiTest.enabled && ctx.ai && ctx.ai.name !== "mock" && ctx.repo && ctx.storage)) {
+    console.warn(`[ai-test] disabled: ${aiTestDiagnostics(ctx, env).join(", ") || "unknown"}`);
+  }
   cached = ctx;
   return ctx;
 }
