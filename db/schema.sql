@@ -227,9 +227,10 @@ CREATE INDEX IF NOT EXISTS production_orders_created_idx ON production_orders(cr
 CREATE INDEX IF NOT EXISTS production_orders_status_idx ON production_orders(status, created_at DESC);
 
 -- ========== อัปเดตสำหรับฐานข้อมูลที่สร้างไว้ก่อนแล้ว (รันซ้ำได้) ==========
--- 'exempt' = งานทดสอบของพนักงานด้วย Mock AI (ไม่ใช้เครดิตใคร)
+-- 'exempt' = งานทดสอบของพนักงาน (ไม่ใช้เครดิตใคร) · 'guest' = งานที่ไม่ต้องสมัครสมาชิก / โหมดทดสอบ
+-- ใช้ค่าชุดเดียวกับส่วนท้ายไฟล์ — รันซ้ำทั้งไฟล์ได้แม้มีงานแบบ guest อยู่แล้ว
 ALTER TABLE ai_jobs DROP CONSTRAINT IF EXISTS ai_jobs_credit_state_check;
-ALTER TABLE ai_jobs ADD CONSTRAINT ai_jobs_credit_state_check CHECK (credit_state IN ('reserved', 'consumed', 'refunded', 'exempt'));
+ALTER TABLE ai_jobs ADD CONSTRAINT ai_jobs_credit_state_check CHECK (credit_state IN ('reserved', 'consumed', 'refunded', 'exempt', 'guest'));
 ALTER TABLE production_orders ADD COLUMN IF NOT EXISTS line_request_id text;
 
 -- ========== เข้าสู่ระบบด้วยเบอร์โทร + OTP (เพิ่มเท่านั้น ไม่แก้ข้อมูลเดิม · รันซ้ำได้) ==========
