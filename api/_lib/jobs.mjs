@@ -43,14 +43,24 @@ function startOfDay(now) {
 export const isJobOwner = (job, { userId, guestId } = {}) =>
   Boolean(job && ((userId && job.user_id === userId) || (guestId && job.guest_id === guestId)));
 
+// งบ AI ทั้งระบบ: ใช้จ่ายจริง (cost_usd จาก OpenAI) + ประมาณการของงานที่ยังไม่เสร็จ — ถึงวงเงิน = ไม่รับงานใหม่
+// budget = { dailyThb, monthlyThb, estimateThb, usdThb, dayStart, monthStart } · ไม่ส่ง budget (Mock/ทดสอบ) = ไม่ตรวจ
+async function assertBudget(t, budget) {
+  if (!budget) return;
+  const o = { estimateThb: budget.estimateThb, usdThb: budget.usdThb };
+  if ((await t.aiSpendThbSince(budget.dayStart, o)) + budget.estimateThb > budget.dailyThb) throw new HttpError(503, "ai_budget_day");
+  if ((await t.aiSpendThbSince(budget.monthStart, o)) + budget.estimateThb > budget.monthlyThb) throw new HttpError(503, "ai_budget_month");
+}
+
 // งานของ Guest (ไม่ต้องสมัครสมาชิก): ไม่ใช้โควตาสมาชิก แต่ผ่านเพดานทั้งหมดภายใน transaction ที่ล็อกไว้
 //   ต่อ Guest/วัน · ต่อ IP/วัน · ทั้งระบบ/วัน · งบ AI ต่อเดือน (ถึงวงเงิน = ปิดอัตโนมัติ) · 1 งานที่กำลังทำต่อ Guest
-async function createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uuid, now, limits, dayStart }) {
+async function createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uuid, now, limits, dayStart, budget }) {
   return repo.tx(async (t) => {
-    await t.lockAiBudget();                           // คำขอ Guest เข้าคิวทีละรายการ → นับเพดานได้แม่นยำ
+    await t.lockAiBudget();                           // คำขอที่ใช้ AI จริงเข้าคิวทีละรายการ → นับเพดาน/งบได้แม่นยำ
     const existing = await t.findGuestJobByIdem(guestId, idempotencyKey);
     if (existing) return { job: existing, created: false };
     if (await t.countGuestActiveJobs(guestId)) throw new HttpError(409, "job_in_progress");
+    try { await assertBudget(t, budget); } catch (err) { throw err instanceof HttpError ? new HttpError(503, "guest_paused") : err; }
     if ((await t.countGuestJobsSince({ since: dayStart })) >= limits.dailyTotal) throw new HttpError(429, "guest_daily_full");
     if ((await t.countGuestJobsSince({ since: dayStart, guestId })) >= limits.perGuestDay) throw new HttpError(429, "guest_limit");
     if ((await t.countGuestJobsSince({ since: dayStart, ipHash })) >= limits.perIpDay) throw new HttpError(429, "guest_limit");
@@ -67,10 +77,11 @@ async function createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uu
 }
 
 // จองสิทธิ์และสร้างงาน (Idempotent ด้วย idempotencyKey)
-export async function createJob({ repo, userId, guestId, ipHash, guestLimits, dayStart, idempotencyKey, input, dailyLimit, defaultCredits, uuid, now = Date.now(), exempt = false }) {
+export async function createJob({ repo, userId, guestId, ipHash, guestLimits, dayStart, budget, idempotencyKey, input, dailyLimit, defaultCredits, uuid, now = Date.now(), exempt = false }) {
   if (!/^[A-Za-z0-9_-]{16,64}$/.test(idempotencyKey || "")) throw new HttpError(400, "bad_request");
-  if (!userId && guestId) return createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uuid, now, limits: guestLimits, dayStart });
+  if (!userId && guestId) return createGuestJob({ repo, guestId, ipHash, idempotencyKey, input, uuid, now, limits: guestLimits, dayStart, budget });
   return repo.tx(async (t) => {
+    if (budget) await t.lockAiBudget();
     // ล็อกแถวโควตาของผู้ใช้ก่อน → คำขอพร้อมกันของคนเดียวกันต่อคิวกัน (กันใช้สิทธิ์เกิน/หักซ้ำ)
     const q = await t.getQuotaForUpdate(userId, defaultCredits);
 
@@ -78,6 +89,7 @@ export async function createJob({ repo, userId, guestId, ipHash, guestLimits, da
     if (existing) return { job: existing, created: false };
 
     if (await t.countActiveJobs(userId)) throw new HttpError(409, "job_in_progress");
+    await assertBudget(t, budget);                    // งบ AI รวมทั้งระบบ (รวมงานทดสอบของพนักงานด้วย)
     if (!exempt) {                                    // งานทดสอบของพนักงาน (Mock) ไม่ใช้เครดิตและไม่นับโควตารายวัน
       if (q.free_credits_used + q.reserved_credits >= q.free_credits_total) throw new HttpError(403, "quota_exhausted");
       if (dailyLimit > 0 && (await t.countJobsSince(startOfDay(now))) >= dailyLimit) throw new HttpError(429, "daily_limit");
@@ -136,16 +148,21 @@ export async function runStep({ repo, storage, provider, userId, guestId, jobId,
   try {
     result = step === "artwork"
       ? await provider.generateArtwork(job.input)
-      : await provider.generateMockup(job.input, await storage.getPrivate(job.artwork_storage_key));
+      : await provider.generateMockup(job.input, await storage.getPrivate(job.artwork_original_key || job.artwork_storage_key));
   } catch (err) {
     return finishFailure({ repo, jobId, step, unknown: Boolean(err && err.unknown), now });
   }
 
   // 3) เก็บไฟล์ใน Private Blob แล้วบันทึกผล + ใช้สิทธิ์ (ครั้งเดียวต่องาน)
-  const key = await storage.putPrivate(`ai/${userId || `guest-${guestId}`}/${jobId}/${step}.${result.ext}`, result.bytes, result.mime);
+  const base = `ai/${userId || `guest-${guestId}`}/${jobId}/${step}`;
+  const key = await storage.putPrivate(`${base}.${result.ext}`, result.bytes, result.mime);
+  // ต้นฉบับไม่มีลายน้ำ (AI จริง) → Private Blob เท่านั้น ไม่ส่งให้ลูกค้า (ใช้สร้าง Mockup / พนักงาน)
+  const originalKey = result.original ? await storage.putPrivate(`${base}-original.${result.original.ext}`, result.original.bytes, result.original.mime) : null;
   return repo.tx(async (t) => {
     const cur = await t.getJobForUpdate(jobId);
     const patch = { [statusKey]: "done", [`${step}_storage_key`]: key, error_code: null, updated_at: new Date(now()).toISOString() };
+    if (originalKey) patch[`${step}_original_key`] = originalKey;
+    if (typeof result.costUsd === "number") patch.cost_usd = Number(cur.cost_usd || 0) + result.costUsd;
     if (cur.credit_state === "reserved") {
       const q = await t.getQuotaForUpdate(cur.user_id, 0);
       await t.updateQuota(cur.user_id, { free_credits_used: q.free_credits_used + 1, reserved_credits: Math.max(0, q.reserved_credits - 1) });

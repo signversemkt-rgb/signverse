@@ -10,7 +10,7 @@ import { route } from "./_lib/route.mjs";
 import { sendJson, readJson, query, HttpError, assertSameOrigin, getIp, cleanText, isId } from "./_lib/http.mjs";
 import { need, rateLimit, verifyTurnstile, canUseLineOrders, canUseAi, isCreditExempt, resolveActor } from "./_lib/context.mjs";
 import { createJob, runStep, jobView, quotaView, isJobOwner } from "./_lib/jobs.mjs";
-import { ipHash, dayStart, guestUsage } from "./_lib/guest.mjs";
+import { ipHash, dayStart, guestUsage, budgetNow } from "./_lib/guest.mjs";
 import { LIMITS } from "./_lib/images.mjs";
 import { generateOrderNo, generateClaimCode, estimateFromForm, cleanOrderForm, orderView } from "./_lib/orders.mjs";
 import { verifyLiffIdToken, liffListOrders, liffPrepare, liffResult } from "./_lib/delivery.mjs";
@@ -85,7 +85,7 @@ async function handleGuest(req, res, ctx, { guestId }) {
     const g = ctx.config.guest;
     const { job, created } = await createJob({
       repo: ctx.repo, guestId, ipHash: ipHash(ctx, ip), idempotencyKey: body.idempotencyKey, input, uuid: ctx.uuid,
-      guestLimits: g, dayStart: dayStart(),
+      guestLimits: g, dayStart: dayStart(), budget: budgetNow(ctx),
     });
     return sendJson(res, created ? 201 : 200, { job: jobView(job), created, guest: await guestUsage(ctx, guestId, ip) });
   }
@@ -163,6 +163,7 @@ export default route(async (req, res, ctx) => {
       repo: ctx.repo, userId: user.id, idempotencyKey: body.idempotencyKey, input,
       dailyLimit: ctx.config.dailyLimit, defaultCredits: ctx.config.defaultCredits, uuid: ctx.uuid,
       exempt: isCreditExempt(ctx, user),
+      budget: budgetNow(ctx),                             // งบ AI รวมทั้งระบบ (เฉพาะ AI จริง)
     });
     const quota = quotaView(await ctx.repo.getQuota(user.id, ctx.config.defaultCredits));
     return sendJson(res, created ? 201 : 200, { job: jobView(job), quota, created });

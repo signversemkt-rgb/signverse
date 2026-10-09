@@ -7,7 +7,8 @@ import { createMemoryStorage, createVercelStorage, resolveBlobConfig } from "./s
 import { createMockProvider } from "./ai-mock.mjs";
 import { enabledLoginMethods, phoneLoginStatus, getAuth, sessionFromRequest, authConfigured } from "./auth.mjs";
 import { phoneLoginConfig, createOtpService } from "./phone.mjs";
-import { guestConfig, guestAiState, readGuestId, ensureGuestId } from "./guest.mjs";
+import { guestConfig, guestAiState, readGuestId, ensureGuestId, aiBudgetConfig } from "./guest.mjs";
+import { createOpenAIProvider } from "./ai-openai.mjs";
 import { createLineClient } from "./line.mjs";
 
 const int = (v, d) => {
@@ -53,6 +54,7 @@ export async function getContext(env = process.env) {
       liffId: env.LIFF_ID || "",                          // เปิดเผยได้ (ใช้ฝั่งหน้า LIFF)
       liffChannelId: env.LINE_LOGIN_CHANNEL_ID || "",     // ใช้ตรวจ LIFF ID token ฝั่ง Server
       guest: guestConfig(env, { mock }),                  // สร้างภาพ AI โดยไม่ต้องสมัครสมาชิก (GUEST_AI_ENABLED)
+      aiBudget: aiBudgetConfig(env),                      // งบ AI ทั้งระบบ: ต่อวัน / ต่อเดือน
     },
     // ปุ่มเข้าสู่ระบบบนหน้าเว็บ: social = ["facebook"] (LINE/Google ปิด — เปิดได้ด้วย AUTH_PROVIDERS) + สถานะเบอร์โทร
     providers: enabledLoginMethods(env, { mock }),
@@ -91,9 +93,21 @@ export async function getContext(env = process.env) {
       const blob = await import("@vercel/blob");
       ctx.storage = createVercelStorage({ blob, config: blobConfig });
     }
-    // AI จริงยังไม่เปิด: ต้องมีระบบลายน้ำฝั่ง Server ก่อน (รออนุมัติแพ็กเกจประมวลผลภาพ)
-    // AI_PROVIDER=mock ใช้ทดสอบบน Preview ได้โดยไม่มีค่าใช้จ่าย
-    ctx.ai = env.AI_PROVIDER === "mock" ? createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" }) : null;
+    // AI สร้างภาพ:
+    //   AI_PROVIDER=mock   → ภาพตัวอย่าง (ไม่มีค่าใช้จ่าย) เฉพาะพนักงาน
+    //   AI_PROVIDER=openai → GPT Image 2 + ลายน้ำฝั่ง Server (sharp) · มีค่าใช้จ่าย · ผ่านงบรายวัน/รายเดือน
+    //     AI_ACCESS=staff (ค่าเริ่มต้น) = เฉพาะพนักงานทดสอบ · AI_ACCESS=members = เปิดให้สมาชิก (และ Guest ถ้าเปิด flag)
+    if (env.AI_PROVIDER === "openai" && env.OPENAI_API_KEY) {
+      ctx.ai = createOpenAIProvider({
+        apiKey: env.OPENAI_API_KEY,
+        model: env.OPENAI_IMAGE_MODEL || "gpt-image-2",
+        quality: env.AI_IMAGE_QUALITY || "medium",
+        loadImage: (ref) => loadReferenceImage(ctx, ref),
+      });
+      ctx.aiStaffOnly = env.AI_ACCESS !== "members";
+    } else {
+      ctx.ai = env.AI_PROVIDER === "mock" ? createMockProvider({ format: env.MOCK_AI_FORMAT === "svg" ? "svg" : "png" }) : null;
+    }
     // Mock AI บนเว็บจริงใช้ทดสอบเท่านั้น → เฉพาะบัญชี staff/admin (ตรวจที่ Server)
     ctx.aiMockStaffOnly = env.AI_PROVIDER === "mock";
     ctx.getSession = async (req) => {
@@ -125,6 +139,20 @@ export async function resolveActor(ctx, req, res, { create = false } = {}) {
     if (guestId) return { user: null, userId: null, guestId };
   }
   throw new HttpError(401, "unauthenticated");
+}
+
+// รูปอ้างอิงสำหรับส่งให้ AI: ไฟล์ private ของลูกค้า (storage key) หรือรูปผลงานที่ร้านเผยแพร่ (Public Blob เท่านั้น — กัน SSRF)
+export async function loadReferenceImage(ctx, ref) {
+  if (ref && ref.key) return ctx.storage.getPrivate(ref.key);
+  const url = ref && ref.url;
+  if (!url) throw new Error("no_reference");
+  const u = new URL(url);
+  if (u.protocol !== "https:" || !u.hostname.endsWith(".public.blob.vercel-storage.com")) throw new Error("reference_host_not_allowed");
+  const r = await fetch(u, { redirect: "error" });
+  if (!r.ok) throw new Error(`reference_${r.status}`);
+  const mime = r.headers.get("content-type") || "image/png";
+  if (!/^image\/(png|jpeg|webp)$/.test(mime)) throw new Error("reference_type");
+  return { bytes: new Uint8Array(await r.arrayBuffer()), mime };
 }
 
 export function need(ctx, ...parts) {
@@ -189,7 +217,7 @@ const isStaffUser = (user) => Boolean(user && (user.role === "staff" || user.rol
 // ผู้ใช้คนนี้สร้างภาพ AI ได้หรือไม่ (Mock AI บนเว็บจริง = เฉพาะพนักงาน)
 export function canUseAi(ctx, user) {
   if (!ctx.ai || !ctx.repo || !ctx.storage) return false;
-  if (ctx.aiMockStaffOnly) return isStaffUser(user);
+  if (ctx.aiMockStaffOnly || ctx.aiStaffOnly) return isStaffUser(user);
   return true;
 }
 
@@ -201,7 +229,7 @@ export function canUseAi(ctx, user) {
 //   coming_soon    → ล็อกอินแล้ว แต่ระบบยังไม่เปิดให้ผู้ใช้นี้ (ไม่อัปโหลดรูป ไม่สร้างภาพ ไม่ใช้สิทธิ์)
 // aiReady = เปิดให้ลูกค้าทั่วไปใช้ AI จริงแล้วหรือยัง (ไม่ขึ้นกับผู้ใช้)
 export function aiReadyForCustomers(ctx) {
-  return Boolean(ctx.ai && ctx.repo && ctx.storage && ctx.ai.name !== "mock" && !ctx.aiMockStaffOnly);
+  return Boolean(ctx.ai && ctx.repo && ctx.storage && ctx.ai.name !== "mock" && !ctx.aiMockStaffOnly && !ctx.aiStaffOnly);
 }
 export function aiStatus(ctx, user, guest = null) {
   if (!user) {
@@ -214,7 +242,7 @@ export function aiStatus(ctx, user, guest = null) {
   return ctx.ai.name === "mock" ? "mock_test" : "ready";
 }
 
-// งานทดสอบของพนักงานด้วย Mock AI ไม่ใช้เครดิตของใคร
+// งานทดสอบของพนักงาน (Mock หรือช่วงทดสอบ AI จริง) ไม่ใช้เครดิตของใคร — แต่ AI จริงยังนับในงบรวม
 export function isCreditExempt(ctx, user) {
-  return Boolean(ctx.ai && ctx.ai.name === "mock" && isStaffUser(user));
+  return Boolean(ctx.ai && (ctx.ai.name === "mock" || ctx.aiStaffOnly) && isStaffUser(user));
 }

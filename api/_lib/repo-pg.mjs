@@ -1,7 +1,7 @@
 // Repository บน Neon Postgres (@neondatabase/serverless) — อินเทอร์เฟซเดียวกับ repo-memory.mjs
 // ทุกคำสั่งใช้ parameter ($1, $2 …) เท่านั้น; ชื่อคอลัมน์ที่ต่อ string มาจาก whitelist ภายใน
 
-const JOB_COLS = ["status", "artwork_status", "mockup_status", "artwork_storage_key", "mockup_storage_key", "credit_state", "attempts", "error_code", "updated_at"];
+const JOB_COLS = ["status", "artwork_status", "mockup_status", "artwork_storage_key", "mockup_storage_key", "artwork_original_key", "mockup_original_key", "cost_usd", "credit_state", "attempts", "error_code", "updated_at"];
 const QUOTA_COLS = ["free_credits_total", "free_credits_used", "reserved_credits"];
 const ALBUM_COLS = ["title", "description", "cover_image_id", "sort_order", "is_published", "updated_by", "updated_at", "deleted_at"];
 const IMAGE_COLS = ["album_id", "title", "alt", "sort_order", "is_published", "public_url", "public_thumb_url", "public_key", "public_thumb_key", "updated_by", "updated_at", "deleted_at"];
@@ -19,6 +19,15 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
   const countGuest = async ({ since, guestId = null, ipHash = null }, client = pool) => Number((await q(
     `SELECT count(*) FROM ai_jobs WHERE guest_id IS NOT NULL AND created_at >= $1
        AND ($2::text IS NULL OR guest_id = $2) AND ($3::text IS NULL OR guest_ip_hash = $3)`, [since, guestId, ipHash], client))[0].count);
+  // ค่าใช้จ่าย AI (บาท) ตั้งแต่ช่วงเวลา — นับแบบไม่ให้ต่ำกว่าจริง · ไม่นับงาน Mock
+  //   ค่าจริง (cost_usd) + ครั้งที่ไม่รู้ค่า (หมดเวลา/ล้มเหลว/กำลังทำ) ครั้งละครึ่งของค่าประมาณต่องาน
+  //   งานที่ยังไม่จบ นับอย่างน้อยค่าประมาณต่องาน (Mockup ยังต้องสร้าง)
+  const aiSpend = async (since, { estimateThb, usdThb }, client = pool) => Number((await q(
+    `SELECT coalesce(sum(CASE WHEN status IN ('completed', 'failed') THEN spent ELSE greatest(spent, $3) END), 0) AS thb FROM (
+       SELECT status, coalesce(cost_usd, 0) * $2
+              + greatest(attempts - (artwork_status = 'done')::int - (mockup_status = 'done')::int, 0) * ($3 / 2.0) AS spent
+         FROM ai_jobs WHERE created_at >= $1 AND coalesce(input->>'provider', '') NOT IN ('', 'mock')) s`,
+    [since, usdThb, estimateThb], client))[0].thb);
 
   const txApi = (c) => ({
     async userExists(userId) { return (await q(`SELECT 1 FROM "user" WHERE "id" = $1`, [userId], c)).length > 0; },
@@ -39,11 +48,12 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
         [j.job_id, j.user_id, j.guest_id || null, j.guest_ip_hash || null, j.idempotency_key, j.status, j.artwork_status, j.mockup_status, j.credit_state, j.attempts, JSON.stringify(j.input), j.created_at, j.updated_at], c);
     },
     // ---------- Guest (ไม่ต้องสมัครสมาชิก) ----------
-    // ล็อกระดับ transaction: คำขอสร้างงาน Guest เข้าคิวทีละรายการ → นับเพดานรายวันได้แม่นยำ
+    // ล็อกระดับ transaction: คำขอสร้างงาน Guest เข้าคิวทีละรายการ → นับเพดานรายวัน/งบประมาณได้แม่นยำ
     async lockAiBudget() { await q(`SELECT pg_advisory_xact_lock(hashtext('sv-ai-budget'))`, [], c); },
     async findGuestJobByIdem(guestId, key) { return (await q(`SELECT * FROM ai_jobs WHERE guest_id = $1 AND idempotency_key = $2`, [guestId, key], c))[0] || null; },
     async countGuestActiveJobs(guestId) { return Number((await q(`SELECT count(*) FROM ai_jobs WHERE guest_id = $1 AND status IN ('pending','processing')`, [guestId], c))[0].count); },
     async countGuestJobsSince(o) { return countGuest(o, c); },
+    async aiSpendThbSince(since, o) { return aiSpend(since, o, c); },
     async getJobForUpdate(jobId) { return (await q(`SELECT * FROM ai_jobs WHERE job_id = $1 FOR UPDATE`, [jobId], c))[0] || null; },
     async updateJob(jobId, patch) {
       const s = setClause(patch, JOB_COLS, 2);
@@ -85,6 +95,7 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
     async listJobsByUser(userId, limit = 20) { return q(`SELECT * FROM ai_jobs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`, [userId, limit]); },
     async listJobsByGuest(guestId, limit = 10) { return q(`SELECT * FROM ai_jobs WHERE guest_id = $1 ORDER BY created_at DESC LIMIT $2`, [guestId, limit]); },
     async countGuestJobsSince(o) { return countGuest(o); },
+    async aiSpendThbSince(since, o) { return aiSpend(since, o); },
     async listProblemJobs(staleBefore, limit = 50) {
       return q(`SELECT * FROM ai_jobs WHERE credit_state = 'reserved'
                 AND (artwork_status = 'unknown' OR mockup_status = 'unknown' OR (status IN ('pending','processing') AND updated_at < $1))
@@ -107,13 +118,13 @@ export function createPgRepo({ Pool, connectionString, uuid }) {
     async listExpiredUploads(now, limit = 200) { return q(`SELECT * FROM customer_uploads WHERE expires_at < $1 LIMIT $2`, [now, limit]); },
     async deleteUpload(id) { await q(`DELETE FROM customer_uploads WHERE upload_id = $1`, [id]); },
     async listExpiredJobs(before, limit = 200) {
-      return q(`SELECT * FROM ai_jobs WHERE created_at < $1 AND (artwork_storage_key IS NOT NULL OR mockup_storage_key IS NOT NULL) LIMIT $2`, [before, limit]);
+      return q(`SELECT * FROM ai_jobs WHERE created_at < $1 AND (artwork_storage_key IS NOT NULL OR mockup_storage_key IS NOT NULL OR artwork_original_key IS NOT NULL OR mockup_original_key IS NOT NULL) LIMIT $2`, [before, limit]);
     },
     async listExpiredGuestJobs(before, limit = 200) {
-      return q(`SELECT * FROM ai_jobs WHERE guest_id IS NOT NULL AND created_at < $1 AND (artwork_storage_key IS NOT NULL OR mockup_storage_key IS NOT NULL) LIMIT $2`, [before, limit]);
+      return q(`SELECT * FROM ai_jobs WHERE guest_id IS NOT NULL AND created_at < $1 AND (artwork_storage_key IS NOT NULL OR mockup_storage_key IS NOT NULL OR artwork_original_key IS NOT NULL OR mockup_original_key IS NOT NULL) LIMIT $2`, [before, limit]);
     },
     async clearJobFiles(jobId) {
-      await q(`UPDATE ai_jobs SET artwork_storage_key = NULL, mockup_storage_key = NULL,
+      await q(`UPDATE ai_jobs SET artwork_storage_key = NULL, mockup_storage_key = NULL, artwork_original_key = NULL, mockup_original_key = NULL,
                artwork_status = CASE WHEN artwork_status = 'done' THEN 'failed' ELSE artwork_status END,
                mockup_status = CASE WHEN mockup_status = 'done' THEN 'failed' ELSE mockup_status END,
                error_code = 'expired', updated_at = now() WHERE job_id = $1`, [jobId]);

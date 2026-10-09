@@ -18,13 +18,13 @@ export default route(async (req, res, ctx) => {
   }
   const jobCutoff = new Date(now - ctx.config.retentionDays * 86400000);
   for (const j of await ctx.repo.listExpiredJobs(jobCutoff)) {
-    for (const k of [j.artwork_storage_key, j.mockup_storage_key]) if (k) await ctx.storage.delPrivate(k).catch(() => {});
+    for (const k of [j.artwork_storage_key, j.mockup_storage_key, j.artwork_original_key, j.mockup_original_key]) if (k) await ctx.storage.delPrivate(k).catch(() => {});
     await ctx.repo.clearJobFiles(j.job_id);
     out.jobs++;
   }
   const guestCutoff = new Date(now - ctx.config.guest.retentionDays * 86400000);
   for (const j of await ctx.repo.listExpiredGuestJobs(guestCutoff)) {
-    for (const k of [j.artwork_storage_key, j.mockup_storage_key]) if (k) await ctx.storage.delPrivate(k).catch(() => {});
+    for (const k of [j.artwork_storage_key, j.mockup_storage_key, j.artwork_original_key, j.mockup_original_key]) if (k) await ctx.storage.delPrivate(k).catch(() => {});
     await ctx.repo.clearJobFiles(j.job_id);
     out.jobs++;
   }

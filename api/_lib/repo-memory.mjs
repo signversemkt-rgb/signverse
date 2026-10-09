@@ -21,6 +21,14 @@ export function createMemoryRepo({ uuid }) {
   let chain = Promise.resolve();
   const countGuest = (since, guestId, ipHash) => [...db.jobs.values()].filter((j) => j.guest_id && new Date(j.created_at) >= since
     && (!guestId || j.guest_id === guestId) && (!ipHash || j.guest_ip_hash === ipHash)).length;
+  // ค่าใช้จ่าย AI (บาท) แบบไม่ให้ต่ำกว่าจริง — เหมือน repo-pg.mjs
+  const aiSpend = (since, { estimateThb, usdThb }) => [...db.jobs.values()]
+    .filter((j) => new Date(j.created_at) >= since && j.input?.provider && j.input.provider !== "mock")
+    .reduce((sum, j) => {
+      const done = (j.artwork_status === "done") + (j.mockup_status === "done");
+      const spent = (j.cost_usd || 0) * usdThb + Math.max(j.attempts - done, 0) * (estimateThb / 2);
+      return sum + (["completed", "failed"].includes(j.status) ? spent : Math.max(spent, estimateThb));
+    }, 0);
   const clone = (v) => (v == null ? v : JSON.parse(JSON.stringify(v)));
 
   const t = {
@@ -64,6 +72,7 @@ export function createMemoryRepo({ uuid }) {
       return [...db.jobs.values()].filter((j) => j.guest_id === guestId && ["pending", "processing"].includes(j.status)).length;
     },
     async countGuestJobsSince({ since, guestId, ipHash }) { return countGuest(since, guestId, ipHash); },
+    async aiSpendThbSince(since, o) { return aiSpend(since, o); },
     async updateJob(jobId, patch) { db.jobs.set(jobId, { ...db.jobs.get(jobId), ...clone(patch) }); },
     async audit(actorId, action, target, detail) {
       db.audit.push({ event_id: uuid(), actor_id: actorId, action, target, detail, created_at: new Date().toISOString() });
@@ -94,6 +103,7 @@ export function createMemoryRepo({ uuid }) {
       return clone([...db.jobs.values()].filter((j) => j.guest_id === guestId).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit));
     },
     async countGuestJobsSince({ since, guestId, ipHash }) { return countGuest(since, guestId, ipHash); },
+    async aiSpendThbSince(since, o) { return aiSpend(since, o); },
     async listJobsByUser(userId, limit = 20) {
       return clone([...db.jobs.values()].filter((j) => j.user_id === userId).sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, limit));
     },
@@ -118,12 +128,12 @@ export function createMemoryRepo({ uuid }) {
     },
     async deleteUpload(id) { db.uploads.delete(id); },
     async listExpiredJobs(before, limit = 200) {
-      return clone([...db.jobs.values()].filter((j) => new Date(j.created_at) < before && (j.artwork_storage_key || j.mockup_storage_key)).slice(0, limit));
+      return clone([...db.jobs.values()].filter((j) => new Date(j.created_at) < before && (j.artwork_storage_key || j.mockup_storage_key || j.artwork_original_key || j.mockup_original_key)).slice(0, limit));
     },
     async listExpiredGuestJobs(before, limit = 200) {
-      return clone([...db.jobs.values()].filter((j) => j.guest_id && new Date(j.created_at) < before && (j.artwork_storage_key || j.mockup_storage_key)).slice(0, limit));
+      return clone([...db.jobs.values()].filter((j) => j.guest_id && new Date(j.created_at) < before && (j.artwork_storage_key || j.mockup_storage_key || j.artwork_original_key || j.mockup_original_key)).slice(0, limit));
     },
-    async clearJobFiles(jobId) { const j = db.jobs.get(jobId); if (j) { j.artwork_storage_key = null; j.mockup_storage_key = null; j.artwork_status = j.artwork_status === "done" ? "failed" : j.artwork_status; j.mockup_status = j.mockup_status === "done" ? "failed" : j.mockup_status; j.error_code = "expired"; } },
+    async clearJobFiles(jobId) { const j = db.jobs.get(jobId); if (j) { j.artwork_storage_key = null; j.mockup_storage_key = null; j.artwork_original_key = null; j.mockup_original_key = null; j.artwork_status = j.artwork_status === "done" ? "failed" : j.artwork_status; j.mockup_status = j.mockup_status === "done" ? "failed" : j.mockup_status; j.error_code = "expired"; } },
 
     // ไฟล์ private นี้เป็นของใคร (ใช้ตรวจสิทธิ์ใน /api/files)
     async findJobFile(jobId, kind) {

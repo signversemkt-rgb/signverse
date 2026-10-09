@@ -183,6 +183,31 @@
 - พนักงานยังเห็นเลขออร์เดอร์ในข้อความลูกค้า → เปิดดูภาพที่หลังบ้าน แท็บ **ออร์เดอร์** (พร้อมใช้แล้ว)
 - หรือเปิด **ทาง B (LIFF)** ให้ลูกค้าเป็นผู้ส่งรูป (ข้อความจากลูกค้าแสดงในแชตพนักงาน) — ขั้นตอนลูกค้าเพิ่มขึ้น
 
+## 6.55 AI สร้างภาพจริง (OpenAI GPT Image 2 + ลายน้ำ)
+
+> มีค่าใช้จ่าย — GPT Image 2 ขนาด 1536×1024: Medium ~$0.041/ภาพ, High ~$0.165/ภาพ (ราคาทางการ ต.ค. 2026) · 1 งาน = Artwork + Mockup
+> ลายน้ำ SIGN VERSE • PREVIEW ใส่ฝั่ง Server ด้วย `sharp` · ต้นฉบับไม่มีลายน้ำเก็บใน Private Blob เท่านั้น
+
+1. OpenAI → **Organization verification** (ถ้า OpenAI ขอ) และตั้ง **Usage limit / Budget ต่อเดือน** ใน Billing เป็นชั้นป้องกันสุดท้าย (เช่น $50)
+2. Neon → รัน `db/schema.sql` ล่าสุด (เพิ่ม `artwork_original_key`, `mockup_original_key`, `cost_usd`)
+3. Vercel → Environment Variables (Production):
+
+| ตัวแปร | ค่า |
+|---|---|
+| `AI_PROVIDER` | `openai` |
+| `OPENAI_API_KEY` | มีอยู่แล้ว (ใช้ร่วมกับสรุปบรีฟ) |
+| `OPENAI_IMAGE_MODEL` | `gpt-image-2` (ค่าเริ่มต้น) |
+| `AI_IMAGE_QUALITY` | `medium` (ค่าเริ่มต้น) · `high` แพงขึ้น ~4 เท่า |
+| `AI_ACCESS` | ไม่ตั้ง = **เฉพาะพนักงานทดสอบ** · `members` = เปิดให้สมาชิก (และ Guest ถ้าเปิด `GUEST_AI_ENABLED`) |
+| `AI_DAILY_BUDGET_THB` / `AI_MONTHLY_BUDGET_THB` | `200` / `1500` |
+
+4. Redeploy → พนักงานล็อกอินแล้วทดสอบสร้างภาพ (ไม่ใช้เครดิตลูกค้า แต่นับในงบรวม)
+
+### Cloudflare Turnstile (กันบอท — ต้องตั้งก่อนเปิด Guest AI)
+1. dash.cloudflare.com → **Turnstile** → **Add widget** → Hostname `signverse-azure.vercel.app` → Widget mode **Managed**
+2. Vercel → `TURNSTILE_SITE_KEY` (Site Key) และ `TURNSTILE_SECRET_KEY` (Secret Key) → Redeploy
+3. หน้าเว็บแสดงกรอบยืนยันก่อนสร้างภาพ · Server ตรวจโทเคนทุกครั้ง (ไม่ผ่าน = ไม่สร้างภาพ ไม่หักสิทธิ์)
+
 ## 6.6 สร้างภาพ AI ฟรีโดยไม่ต้องสมัครสมาชิก (Guest · เปิดชั่วคราว)
 
 **ต้องมี AI จริงก่อน** — ถ้ายังไม่มี ระบบจะแสดง "กำลังเตรียมเปิดบริการ" (ปุ่มกดไม่ได้) และไม่ใช้ Mock AI กับลูกค้าเด็ดขาด
@@ -196,6 +221,10 @@
 | `GUEST_AI_PER_GUEST_DAY` | `2` | งานต่อผู้ใช้ (cookie) ต่อวัน |
 | `GUEST_AI_PER_IP_DAY` | `4` | งานต่อ IP ต่อวัน (กันล้าง cookie แล้วขอใหม่) |
 | `GUEST_AI_DAILY_TOTAL` | `40` | งาน Guest ทั้งระบบต่อวัน |
+| `AI_DAILY_BUDGET_THB` | `200` | งบ AI ทั้งระบบต่อวัน (สมาชิก + พนักงาน + Guest) — ถึงวงเงิน = ไม่รับงาน AI ใหม่จนถึงเที่ยงคืน |
+| `AI_MONTHLY_BUDGET_THB` | `1500` | งบ AI ทั้งระบบต่อเดือน — ถึงวงเงิน = ปิดอัตโนมัติจนถึงต้นเดือน |
+| `AI_COST_PER_JOB_THB` | `8` | ค่าประมาณสำหรับงานที่ยังไม่รู้ค่าใช้จ่ายจริง (งานที่เสร็จใช้ค่าจริงจาก OpenAI) |
+| `AI_USD_THB` | `36` | อัตราแลกเปลี่ยนสำหรับคำนวณงบ |
 | `GUEST_FILE_RETENTION_DAYS` | `7` | เก็บรูป/ภาพของ Guest กี่วันแล้วลบอัตโนมัติ |
 | `GUEST_SIGNING_SECRET` | (ใช้ `BETTER_AUTH_SECRET`) | ไม่บังคับ: กุญแจลงลายเซ็น cookie Guest (≥ 32 ตัว) |
 | `TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY` | — | **แนะนำมาก**: กันบอทกดสร้างภาพ (ฟรี) |

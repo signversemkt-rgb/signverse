@@ -139,7 +139,7 @@ test("กันกดซ้ำ (Idempotency) และ 1 งานที่ก�
   assert.equal(busy.json.code, "job_in_progress");
 });
 
-test("เพดาน: ต่อ Guest / ต่อ IP (ล้าง cookie ก็ไม่รอด) / ทั้งระบบต่อวัน", async () => {
+test("เพดาน: ต่อ Guest / ต่อ IP (ล้าง cookie ก็ไม่รอด) / ทั้งระบบต่อวัน / งบรายวัน+รายเดือน → ปิดอัตโนมัติ", async () => {
   mode({ enabled: true, limits: { perGuestDay: 2, perIpDay: 3 } });
   const ip = freshIp();
   const c1 = await create(null, ip);
@@ -164,6 +164,22 @@ test("เพดาน: ต่อ Guest / ต่อ IP (ล้าง cookie ก�
   assert.equal(full.status, 429);
   assert.equal(full.json.code, "guest_daily_full");
 
+  // งบ AI รายวัน / รายเดือน (ค่าใช้จ่ายจริง + ประมาณการ) ถึงวงเงิน → ปิด Guest อัตโนมัติ
+  const o = { estimateThb: 8, usdThb: 36 };
+  const spent = await ctx.repo.aiSpendThbSince(new Date(Date.now() - 86400000), o);
+  assert.ok(spent > 0, "นับค่าใช้จ่ายงาน AI จริง");
+  mode({ enabled: true });
+  ctx.config.aiBudget = { dailyThb: Math.floor(spent), monthlyThb: 100000, ...o };
+  const dayStop = await create(null, freshIp());
+  assert.equal(dayStop.status, 503);
+  assert.equal(dayStop.json.code, "guest_paused");
+  ctx.config.aiBudget = { dailyThb: 100000, monthlyThb: Math.floor(spent), ...o };
+  const monthStop = await create(null, freshIp());
+  assert.equal(monthStop.status, 503);
+  const m = (await call(me, { ip: freshIp() })).json;
+  assert.equal(m.aiStatus, "guest_limit");
+  assert.equal(m.guest.paused, true);
+  ctx.config.aiBudget = { dailyThb: 200, monthlyThb: 1500, ...o };
 });
 
 test("อัปโหลด Reference / รูปหน้าร้านของ Guest: เก็บ 7 วัน · ใช้ไฟล์ของ Guest คนอื่นไม่ได้ · ตรวจชนิดไฟล์", async () => {

@@ -270,3 +270,9 @@ ALTER TABLE customer_uploads ADD COLUMN IF NOT EXISTS guest_id text;
 ALTER TABLE customer_uploads DROP CONSTRAINT IF EXISTS customer_uploads_owner_check;
 ALTER TABLE customer_uploads ADD CONSTRAINT customer_uploads_owner_check CHECK (user_id IS NOT NULL OR guest_id IS NOT NULL);
 CREATE INDEX IF NOT EXISTS customer_uploads_guest_idx ON customer_uploads(guest_id) WHERE guest_id IS NOT NULL;
+
+-- ========== AI สร้างภาพจริง (GPT Image 2 + ลายน้ำ) — เพิ่มเท่านั้น · รันซ้ำได้ ==========
+-- ต้นฉบับไม่มีลายน้ำ (Private Blob เท่านั้น ไม่ส่งให้ลูกค้า) + ค่าใช้จ่ายจริงต่องาน (USD จาก usage ของ OpenAI) ใช้คุมงบรายวัน/รายเดือน
+ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS artwork_original_key text;
+ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS mockup_original_key text;
+ALTER TABLE ai_jobs ADD COLUMN IF NOT EXISTS cost_usd numeric(10,4);

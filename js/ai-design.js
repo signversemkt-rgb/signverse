@@ -393,6 +393,8 @@
       genLabel.textContent = genLabelFor(acc);
     }
     genBtn.title = st === "coming_soon" ? "ระบบกำลังเตรียมเปิดบริการ" : "";
+    // กันบอท: แสดงกรอบ Turnstile ล่วงหน้าเมื่อพร้อมสร้างภาพ → โทเคนพร้อมก่อนลูกค้ากดปุ่ม
+    if (acc.turnstileSiteKey && ["ready", "guest_ready", "mock_test"].includes(st)) ensureTurnstile();
   }
 
   function renderQuota() {
@@ -430,6 +432,17 @@
     }
     return turnstileReady;
   }
+  // รอโทเคนจาก Turnstile (ส่วนใหญ่ผ่านเองภายในไม่กี่วินาที) — ไม่ต้องให้ลูกค้ากดซ้ำ
+  async function turnstileToken(widget, ms = 10000) {
+    const t0 = Date.now();
+    for (;;) {
+      const token = window.turnstile.getResponse(widget);
+      if (token) return token;
+      if (Date.now() - t0 > ms) return "";
+      await new Promise((r) => setTimeout(r, 250));
+    }
+  }
+
   // ---------- สร้างภาพ ----------
   function validate(d) {
     if (!d.shopName && !d.signText) return "กรุณากรอกชื่อร้าน หรือข้อความบนป้าย ในฟอร์มด้านบน";
@@ -481,8 +494,8 @@
     try {
       setStep("check");
       const widget = await ensureTurnstile();
-      const turnstileToken = widget != null ? window.turnstile.getResponse(widget) : undefined;
-      if (widget != null && !turnstileToken) throw new Error("กรุณายืนยันว่าไม่ใช่บอทก่อนสร้างภาพ");
+      const tsToken = widget != null ? await turnstileToken(widget) : undefined;
+      if (widget != null && !tsToken) throw new Error("กรุณายืนยันว่าไม่ใช่บอทในกรอบด้านบน แล้วกดสร้างภาพอีกครั้ง");
 
       setStep("style");
       const uploads = [];
@@ -496,7 +509,7 @@
         references: state.refs.map((r) => r.id),
         uploads,
         storefront,
-        turnstileToken,
+        turnstileToken: tsToken,
       });
       state.job = created.job;
       if (created.quota) window.SVAccount.state.quota = created.quota;
